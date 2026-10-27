@@ -175,10 +175,13 @@ export const ClubMembers = () => {
     setFeedbackMessage('');
     try {
       setSubmitting(true);
-      let payload = {};
+      let payload = {
+        is_existing: 0
+      };
 
       if (activeTab === 'STUDENT') {
         payload = {
+          ...payload,
           member_type: 'STUDENT',
           name: studentName,
           department: studentDept,
@@ -188,6 +191,7 @@ export const ClubMembers = () => {
         };
       } else {
         payload = {
+          ...payload,
           member_type: 'ALUMNI',
           name: alumniName,
           gender: alumniGender,
@@ -402,7 +406,8 @@ export const ClubMembers = () => {
       setBulkSubmitting(true);
       const res = await axiosClient.post('/members/bulk', {
         members: validRows,
-        club_id: user?.club_id
+        club_id: user?.club_id,
+        is_existing: 0
       });
 
       if (res.data.success) {
@@ -465,15 +470,24 @@ export const ClubMembers = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Club Members Roster
+            Club Members
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Membership management for <strong>{user?.club_name}</strong> • Student and Alumni network
-          </p>
         </div>
 
         {!isMember && (
-          <div className="flex items-center gap-2.5 self-start md:self-auto">
+          <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
+            <button
+              onClick={() => {
+                setFeedbackMessage('');
+                setErrorMessage('');
+                setIsAddOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#7C3AED] hover:bg-[#6D28D9] text-white rounded-xl text-xs font-bold shadow-sm shadow-[#7C3AED]/20 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Member</span>
+            </button>
+
             <button
               onClick={() => {
                 setBulkError('');
@@ -487,35 +501,24 @@ export const ClubMembers = () => {
               <FileSpreadsheet className="w-4 h-4 text-[#7C3AED]" />
               <span>Import via Excel</span>
             </button>
-            <button
-              onClick={() => {
-                setFeedbackMessage('');
-                setErrorMessage('');
-                setIsAddOpen(true);
-              }}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#7C3AED] hover:bg-[#6D28D9] text-white rounded-xl text-xs font-bold shadow-sm shadow-[#7C3AED]/20 transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Member</span>
-            </button>
           </div>
         )}
       </div>
 
       {/* Search and Filters */}
-      <div className="bg-white p-5 rounded-2xl border border-[#CBD5E1] shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <form onSubmit={handleSearchSubmit} className="relative w-full md:w-80">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search name, email, dept, batch..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white border border-[#CBD5E1] rounded-xl text-xs font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 focus:border-[#7C3AED]"
-            />
-          </form>
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#CBD5E1] shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+        <form onSubmit={handleSearchSubmit} className="relative w-full md:w-80 shrink-0">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search name, email, dept, batch..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-medium text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 focus:border-[#7C3AED]"
+          />
+        </form>
 
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto md:justify-end">
           {/* Member Type Switcher */}
           <div className="flex items-center bg-slate-100 p-1 rounded-xl">
             {[
@@ -562,13 +565,10 @@ export const ClubMembers = () => {
 
       {/* Members Table */}
       <div className="bg-white rounded-2xl border border-[#CBD5E1] shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="px-6 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <h2 className="text-sm font-bold text-slate-900">
             {members.length} Member{members.length !== 1 ? 's' : ''} Listed
           </h2>
-          <span className="text-xs text-slate-500">
-            Target recruitment tracks approved Alumni members • Only student members can become Coordinator
-          </span>
         </div>
 
         {members.length === 0 ? (
@@ -619,7 +619,7 @@ export const ClubMembers = () => {
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-extrabold text-[11px] border ${
                           isAlumni
                             ? 'bg-[#EDE9FE] text-[#7C3AED] border-[#DDD6FE]'
-                            : 'bg-sky-50 text-sky-700 border-sky-200'
+                            : 'bg-purple-50 text-purple-700 border-purple-200'
                         }`}>
                           {isAlumni ? <Briefcase className="w-3.5 h-3.5" /> : <GraduationCap className="w-3.5 h-3.5" />}
                           <span>{isAlumni ? 'Alumni' : 'Student'}</span>
@@ -744,12 +744,12 @@ export const ClubMembers = () => {
         )}
       </div>
 
-      {/* Dual Tab Add Member Modal */}
+      {/* Add Member Modal */}
       <Modal
         isOpen={isAddOpen}
         onClose={() => setIsAddOpen(false)}
         title="Add Club Member"
-        subtitle={`Registering new membership under ${user?.club_name}`}
+        subtitle={`Register a member under ${user?.club_name || 'club'}`}
       >
         <div className="space-y-4">
           {/* Form Switcher Tabs */}
@@ -761,7 +761,7 @@ export const ClubMembers = () => {
                 setErrorMessage('');
                 setFeedbackMessage('');
               }}
-              className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all ${
                 activeTab === 'STUDENT'
                   ? 'bg-white text-[#7C3AED] shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
@@ -778,7 +778,7 @@ export const ClubMembers = () => {
                 setErrorMessage('');
                 setFeedbackMessage('');
               }}
-              className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all ${
                 activeTab === 'ALUMNI'
                   ? 'bg-white text-[#7C3AED] shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
@@ -798,7 +798,7 @@ export const ClubMembers = () => {
           ) : (
             <div className="p-3 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[11px] text-slate-700 font-semibold flex items-center gap-2">
               <Clock className="w-4 h-4 text-[#7C3AED] shrink-0" />
-              <span>Alumni members require Admin approval. Only verified Alumni count toward outreach targets.</span>
+              <span>Alumni applicants are submitted for Admin verification.</span>
             </div>
           )}
 
@@ -1013,13 +1013,11 @@ export const ClubMembers = () => {
               <button
                 type="submit"
                 disabled={submitting}
-                className="px-4 py-2 text-white bg-[#7C3AED] hover:bg-[#6D28D9] rounded-xl text-xs font-bold shadow-sm shadow-[#7C3AED]/20 disabled:opacity-50 transition-all"
+                className="px-4 py-2 text-white rounded-xl text-xs font-bold shadow-sm disabled:opacity-50 transition-all bg-[#7C3AED] hover:bg-[#6D28D9] shadow-[#7C3AED]/20"
               >
                 {submitting 
                   ? 'Submitting...' 
-                  : activeTab === 'STUDENT' 
-                    ? 'Register Student' 
-                    : 'Submit Alumni for Approval'}
+                  : (activeTab === 'STUDENT' ? 'Register Student' : 'Submit Alumni for Approval')}
               </button>
             </div>
           </form>

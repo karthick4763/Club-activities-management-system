@@ -272,7 +272,7 @@ export const MemberDashboard = () => {
             As a registered club member, you receive priority registration for upcoming workshops, networking sessions with industry alumni, and access to all club learning resources and code repositories.
           </p>
           <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>Roster Status: Auto-Approved</span>
+            <span>Membership Status: Auto-Approved</span>
             <span className="font-bold text-[#7C3AED]">Institutional Member</span>
           </div>
         </div>

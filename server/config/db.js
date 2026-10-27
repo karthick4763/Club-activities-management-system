@@ -1,3 +1,4 @@
+
 const mysql = require('mysql2/promise');
 const dotenv = require('dotenv');
 const path = require('path');
@@ -8,7 +9,8 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 let pool = null;
 let sqlJsDb = null;
 let SQL = null;
-let dbType = 'mysql'; // 'mysql' or 'sqlite'
+let dbType = 'mysql';
+
 const dataDir = path.join(__dirname, '..', 'data');
 const dbFilePath = path.join(dataDir, 'club_management.sqlite');
 
@@ -16,8 +18,7 @@ function saveSqlJsDb() {
   if (sqlJsDb && dbType === 'sqlite') {
     try {
       const data = sqlJsDb.export();
-      const buffer = Buffer.from(data);
-      fs.writeFileSync(dbFilePath, buffer);
+      fs.writeFileSync(dbFilePath, Buffer.from(data));
     } catch (e) {
       console.error('[DB] Failed to save SQLite file:', e.message);
     }
@@ -29,25 +30,30 @@ async function getDb() {
     return { query: executeQuery, type: dbType };
   }
 
-  // Try connecting to MySQL first
+  const dbName = process.env.DB_NAME || 'club_management';
+
+  // Try MySQL / TiDB first.
   try {
-    const tempConnection = await mysql.createConnection({
+    const connectionConfig = {
       host: process.env.DB_HOST || 'localhost',
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASSWORD || '',
       port: Number(process.env.DB_PORT) || 3306,
-    });
+      connectTimeout: 10000
+    };
 
-    const dbName = process.env.DB_NAME || 'club_management_db';
-    await tempConnection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
-    await tempConnection.end();
+    // TiDB Cloud requires TLS. Keep local XAMPP connections
+    // unencrypted unless DB_SSL is explicitly enabled.
+    if (process.env.DB_SSL === 'true') {
+      connectionConfig.ssl = {
+        minVersion: 'TLSv1.2'
+      };
+    }
 
+    // Connect directly to the existing database.
     pool = mysql.createPool({
-      host: process.env.DB_HOST || 'localhost',
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || '',
+      ...connectionConfig,
       database: dbName,
-      port: Number(process.env.DB_PORT) || 3306,
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
@@ -55,14 +61,31 @@ async function getDb() {
       keepAliveInitialDelay: 0
     });
 
-    // Test connection
-    const [test] = await pool.query('SELECT 1 + 1 AS result');
+    // Verify that the credentials and database are working.
+    await pool.query('SELECT 1');
+
     dbType = 'mysql';
-    console.log(`[DB] Successfully connected to MySQL database: ${dbName}`);
+    console.log(`[DB] Connected to MySQL/TiDB database: ${dbName}`);
+
     return { query: executeQuery, type: dbType };
   } catch (mysqlErr) {
-    console.warn(`[DB] MySQL notice (${mysqlErr.message}).`);
-    console.log(`[DB] Running in embedded local database engine mode (100% SQL compatible)...`);
+    if (pool) {
+      try {
+        await pool.end();
+      } catch (_) {
+        // Ignore cleanup errors.
+      }
+      pool = null;
+    }
+
+    // Do not silently fall back to SQLite in production.
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[DB] Production database connection failed:', mysqlErr.message);
+      throw mysqlErr;
+    }
+
+    console.warn('[DB] MySQL connection failed:', mysqlErr.message);
+    console.log('[DB] Falling back to local SQLite mode.');
 
     const initSqlJs = require('sql.js');
     SQL = await initSqlJs();
@@ -79,6 +102,7 @@ async function getDb() {
     }
 
     dbType = 'sqlite';
+
     return { query: executeQuery, type: dbType };
   }
 }
@@ -89,56 +113,75 @@ async function executeQuery(sql, params = []) {
   }
 
   if (dbType === 'mysql') {
-    const [rows, fields] = await pool.query(sql, params);
-    return [rows, fields];
-  } else {
-    // Adapter for SQL.js
-    let sqliteSql = sql
-      .replace(/AUTO_INCREMENT/gi, 'AUTOINCREMENT')
-      .replace(/CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP/gi, "CURRENT_TIMESTAMP")
-      .replace(/ENUM\([^)]*\)/gi, 'TEXT')
-      .replace(/MONTH\(([^)]+)\)/gi, "CAST(strftime('%m', $1) AS INTEGER)")
-      .replace(/YEAR\(([^)]+)\)/gi, "CAST(strftime('%Y', $1) AS INTEGER)");
+    return await pool.query(sql, params);
+  }
 
-    const trimmed = sqliteSql.trim();
-    const isSelect = /^(SELECT|PRAGMA|SHOW)/i.test(trimmed);
+  // SQLite adapter for local development.
+  const sqliteSql = sql
+    .replace(/AUTO_INCREMENT/gi, 'AUTOINCREMENT')
+    .replace(
+      /CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP/gi,
+      'CURRENT_TIMESTAMP'
+    )
+    .replace(/ENUM\([^)]*\)/gi, 'TEXT')
+    .replace(/MONTH\(([^)]+)\)/gi, "CAST(strftime('%m', $1) AS INTEGER)")
+    .replace(/YEAR\(([^)]+)\)/gi, "CAST(strftime('%Y', $1) AS INTEGER)");
 
-    try {
-      if (isSelect) {
-        const boundParams = params.map(p => (p instanceof Date ? p.toISOString() : p));
-        const stmt = sqlJsDb.prepare(sqliteSql);
-        stmt.bind(boundParams);
-        const rows = [];
-        while (stmt.step()) {
-          rows.push(stmt.getAsObject());
-        }
-        stmt.free();
-        return [rows, null];
-      } else {
-        const boundParams = params.map(p => (p instanceof Date ? p.toISOString() : p));
-        sqlJsDb.run(sqliteSql, boundParams);
+  const trimmed = sqliteSql.trim();
+  const isSelect = /^(SELECT|PRAGMA|SHOW|WITH)\b/i.test(trimmed);
 
-        // Extract metadata BEFORE export
-        const meta = sqlJsDb.exec('SELECT last_insert_rowid() AS lastId, changes() AS changes');
-        let insertId = 0;
-        let changes = 0;
-        if (meta && meta.length > 0 && meta[0].values && meta[0].values.length > 0) {
-          insertId = Number(meta[0].values[0][0]) || 0;
-          changes = Number(meta[0].values[0][1]) || 0;
-        }
+  try {
+    const boundParams = params.map((p) =>
+      p instanceof Date ? p.toISOString() : p
+    );
 
-        saveSqlJsDb();
+    if (isSelect) {
+      const stmt = sqlJsDb.prepare(sqliteSql);
+      stmt.bind(boundParams);
 
-        return [{
-          insertId,
-          affectedRows: changes,
-          changedRows: changes
-        }, null];
+      const rows = [];
+      while (stmt.step()) {
+        rows.push(stmt.getAsObject());
       }
-    } catch (err) {
-      console.error('[DB Query Error]', err.message, '\nSQL:', sqliteSql, '\nParams:', params);
-      throw err;
+
+      stmt.free();
+      return [rows, null];
     }
+
+    sqlJsDb.run(sqliteSql, boundParams);
+
+    const meta = sqlJsDb.exec(
+      'SELECT last_insert_rowid() AS lastId, changes() AS changes'
+    );
+
+    let insertId = 0;
+    let changes = 0;
+
+    if (meta?.length && meta[0].values?.length) {
+      insertId = Number(meta[0].values[0][0]) || 0;
+      changes = Number(meta[0].values[0][1]) || 0;
+    }
+
+    saveSqlJsDb();
+
+    return [
+      {
+        insertId,
+        affectedRows: changes,
+        changedRows: changes
+      },
+      null
+    ];
+  } catch (err) {
+    console.error(
+      '[DB Query Error]',
+      err.message,
+      '\nSQL:',
+      sqliteSql,
+      '\nParams:',
+      params
+    );
+    throw err;
   }
 }
 

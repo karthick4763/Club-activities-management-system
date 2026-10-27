@@ -253,9 +253,6 @@ export const AllReports = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Filtered Events & Activities Overview
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Detailed breakdown of scheduled, conducted, and rescheduled club events and uploaded reports
-          </p>
         </div>
 
         {/* View Switcher Tabs */}
@@ -437,9 +434,6 @@ export const AllReports = () => {
               <h2 className="text-sm font-bold text-slate-900">
                 Detailed Events & Activities Breakdown • Showing {filteredEvents.length} Event{filteredEvents.length !== 1 ? 's' : ''}
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Target timeframe: {currentMonthLabel} {year === 'ALL' ? '' : year} • Status: {statusFilter === 'ALL' ? 'All Records' : statusFilter}
-              </p>
             </div>
           </div>
 

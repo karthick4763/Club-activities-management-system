@@ -20,13 +20,13 @@ async function testSystem() {
   console.log(`[PASS] Users verified: ${users.length} users found.`);
 
   // 4. Test Coordinator Submitting a New Member
-  const [codingClub] = await query("SELECT id FROM clubs WHERE club_name = 'Coding Club'");
-  const [coord] = await query("SELECT id FROM users WHERE email = 'coding.coord@club.edu'");
+  const [targetClub] = await query("SELECT id FROM clubs WHERE club_name = 'AI Club'");
+  const [coord] = await query("SELECT id FROM users WHERE email = 'ai.coord@club.edu'");
 
   const [insertMemRes] = await query(
     `INSERT INTO members (club_id, name, email, phone, department, year, status, submitted_by)
      VALUES (?, 'Test New Student', 'test.new@student.edu', '9999999999', 'CSE', 'II', 'PENDING', ?)`,
-    [codingClub[0].id, coord[0].id]
+    [targetClub[0].id, coord[0].id]
   );
   const newMemberId = insertMemRes.insertId;
   console.log(`[PASS] Coordinator submitted member ID ${newMemberId}. Initial Status: PENDING.`);
@@ -34,13 +34,13 @@ async function testSystem() {
   // 5. Test Target Logic: PENDING member should NOT count towards approved target
   const [planBefore] = await query(
     `SELECT target_members FROM monthly_action_plans WHERE club_id = ? AND month = 9 AND year = 2026`,
-    [codingClub[0].id]
+    [targetClub[0].id]
   );
   const [approvedBefore] = await query(
     `SELECT COUNT(*) AS approved_count FROM members 
      WHERE club_id = ? AND status = 'APPROVED' 
-     AND (strftime('%m', created_at) = '09' OR MONTH(created_at) = 9)`,
-    [codingClub[0].id]
+     AND MONTH(created_at) = 9`,
+    [targetClub[0].id]
   );
   console.log(`[PASS] Target: ${planBefore[0].target_members}, Approved: ${approvedBefore[0].approved_count}. Pending member excluded from target count.`);
 
@@ -52,8 +52,8 @@ async function testSystem() {
   const [approvedAfter] = await query(
     `SELECT COUNT(*) AS approved_count FROM members 
      WHERE club_id = ? AND status = 'APPROVED' 
-     AND (strftime('%m', created_at) = '09' OR MONTH(created_at) = 9)`,
-    [codingClub[0].id]
+     AND MONTH(created_at) = 9`,
+    [targetClub[0].id]
   );
   console.log(`[PASS] Admin Approved Member ${newMemberId}. Approved count increased from ${approvedBefore[0].approved_count} to ${approvedAfter[0].approved_count}!`);
 
@@ -73,8 +73,9 @@ async function testSystem() {
   console.log(`[PASS] Reschedule history preserved: ${reschedRecords.length} audit entry saved for Event ID ${eventId}.`);
 
   // 8. Test Coordinator Report Upload without Admin Approval
+  await query('DELETE FROM reports WHERE event_id = ?', [eventId]);
   await query(
-    `INSERT OR REPLACE INTO reports (event_id, file_name, file_path, file_size, description, uploaded_by)
+    `INSERT INTO reports (event_id, file_name, file_path, file_size, description, uploaded_by)
      VALUES (?, 'Full_Event_Documentation.pdf', 'uploads/test_doc.pdf', 204800, 'Report verified by coordinator', ?)`,
     [eventId, coord[0].id]
   );

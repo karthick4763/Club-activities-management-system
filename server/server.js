@@ -33,7 +33,7 @@ const eventRoutes = require('./routes/eventRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5005;
 const clientDistPath = path.join(__dirname, '..', 'client', 'dist');
 const uploadsDir = path.join(__dirname, 'uploads');
 
@@ -49,6 +49,7 @@ appRouter.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'healthy', timestamp: new Date(), engine: 'Native Node.js HTTP Engine' });
 });
 
+
 // Mount Sub-routers
 appRouter.use('/api/auth', authRoutes);
 appRouter.use('/api/clubs', clubRoutes);
@@ -57,6 +58,7 @@ appRouter.use('/api/action-plans', actionPlanRoutes);
 appRouter.use('/api/events', eventRoutes);
 appRouter.use('/api/reports', reportRoutes);
 appRouter.use('/api/dashboard', dashboardRoutes);
+
 
 // MIME type dictionary
 const MIME_TYPES = {
@@ -145,6 +147,18 @@ function enhanceResponse(res) {
       }
     });
   };
+
+  res.redirect = function (statusOrUrl, url) {
+    let statusCode = 302;
+    let targetUrl = statusOrUrl;
+    if (typeof statusOrUrl === 'number') {
+      statusCode = statusOrUrl;
+      targetUrl = url;
+    }
+    this.statusCode = statusCode;
+    this.setHeader('Location', targetUrl);
+    this.end();
+  };
 }
 
 // Request Handler (Pure Native Node.js)
@@ -179,7 +193,7 @@ async function handleRequest(req, res) {
   // 2. Parse URL & Query Params safely (prevent crashes from malformed host or paths)
   let parsedUrl;
   try {
-    const rawHost = (req.headers.host || 'localhost:5000').trim().replace(/\s+/g, '');
+    const rawHost = (req.headers.host || 'localhost:5005').trim().replace(/\s+/g, '');
     parsedUrl = new URL(req.url, `http://${rawHost}`);
   } catch (urlErr) {
     res.statusCode = 400;
@@ -374,4 +388,5 @@ if (require.main === module) {
   startServer();
 }
 
+server.startServer = startServer;
 module.exports = server;

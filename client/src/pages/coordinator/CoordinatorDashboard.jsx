@@ -6,6 +6,7 @@ import { StatCard } from '../../components/StatCard';
 import { ProgressBar } from '../../components/ProgressBar';
 import { StatusBadge } from '../../components/StatusBadge';
 import { RemarksModal } from '../../components/RemarksModal';
+import { Modal } from '../../components/Modal';
 import { 
   Building2, 
   Users, 
@@ -18,7 +19,14 @@ import {
   MessageSquare,
   Filter,
   Check,
-  ArrowRight
+  ArrowRight,
+  Sliders,
+  Save,
+  Database,
+  Award,
+  Sparkles,
+  UserCheck,
+  Eye
 } from 'lucide-react';
 
 const MONTHS = [
@@ -47,6 +55,13 @@ export const CoordinatorDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [selectedRemarksEvent, setSelectedRemarksEvent] = useState(null);
 
+  // Club Baseline Modal state
+  const [isBaselineModalOpen, setIsBaselineModalOpen] = useState(false);
+  const [existingAlumniInput, setExistingAlumniInput] = useState(0);
+  const [existingEventsInput, setExistingEventsInput] = useState(0);
+  const [savingBaseline, setSavingBaseline] = useState(false);
+  const [baselineSuccessMsg, setBaselineSuccessMsg] = useState('');
+
   const fetchCoordinatorData = async () => {
     try {
       setLoading(true);
@@ -60,6 +75,28 @@ export const CoordinatorDashboard = () => {
       console.error('Error fetching coordinator dashboard:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveBaseline = async (e) => {
+    e.preventDefault();
+    if (!dashboardData?.club?.id) return;
+    try {
+      setSavingBaseline(true);
+      await axiosClient.put(`/clubs/${dashboardData.club.id}/baseline`, {
+        existing_alumni_count: Number(existingAlumniInput),
+        existing_events_completed_count: Number(existingEventsInput)
+      });
+      setBaselineSuccessMsg('Club baseline counts updated successfully!');
+      setTimeout(() => {
+        setIsBaselineModalOpen(false);
+        setBaselineSuccessMsg('');
+      }, 800);
+      fetchCoordinatorData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to update baseline counts');
+    } finally {
+      setSavingBaseline(false);
     }
   };
 
@@ -112,6 +149,18 @@ export const CoordinatorDashboard = () => {
           ) : (
             <>
               <button
+                onClick={() => {
+                  setExistingAlumniInput(dashboardData?.club?.existing_alumni_count ?? 0);
+                  setExistingEventsInput(dashboardData?.club?.existing_events_completed_count ?? 0);
+                  setIsBaselineModalOpen(true);
+                }}
+                className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl border border-white/20 transition-all flex items-center gap-2 justify-center shadow-sm"
+                title="Configure pre-existing alumni count and already completed events count"
+              >
+                <Sliders className="w-4 h-4" />
+                <span>Club Baseline Counts</span>
+              </button>
+              <button
                 onClick={() => navigate('/coordinator/events')}
                 className="px-4 py-2.5 bg-white text-[#7C3AED] hover:bg-purple-50 font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-2 justify-center"
               >
@@ -160,12 +209,12 @@ export const CoordinatorDashboard = () => {
         </div>
       </div>
 
-      {/* Unified 4-Card KPI Metric Grid Structure */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      {/* Membership Overview Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <StatCard
           title="Total Club Members"
           value={kpis.total_members || 0}
-          subtitle={`${kpis.student_members || 0} Students • ${kpis.alumni_members || 0} Alumni`}
+          subtitle={`${kpis.student_members || 0} Students • ${kpis.actual_alumni || 0} Alumni`}
           icon={Users}
           color="purple"
           clickable={true}
@@ -174,79 +223,235 @@ export const CoordinatorDashboard = () => {
         <StatCard
           title="Student Members"
           value={kpis.student_members || 0}
-          subtitle="Auto-approved regular members"
+          subtitle="Auto-approved regular student members"
           icon={CheckCircle2}
           color="emerald"
           clickable={true}
           onClick={() => navigate('/coordinator/members?type=students')}
         />
-        <StatCard
-          title="Alumni Target Goal"
-          value={`${kpis.monthly_approved || 0} / ${kpis.target_members || 0}`}
-          subtitle={`${kpis.monthly_pending || 0} Pending Alumni approvals`}
-          icon={Target}
-          color="amber"
-          badge={kpis.monthly_pending > 0 ? `${kpis.monthly_pending} Pending` : 'Target Tracking'}
-          clickable={true}
-          onClick={() => navigate('/coordinator/members?type=alumni&status=pending')}
-        />
-        <StatCard
-          title="Events Conducted"
-          value={`${kpis.completed_events || 0} / ${kpis.total_events || 0}`}
-          subtitle={`${kpis.rescheduled_events || 0} Rescheduled activities`}
-          icon={Calendar}
-          color="purple"
-          clickable={true}
-          onClick={() => navigate('/coordinator/events')}
-        />
       </div>
 
-      {/* Target Progress Card */}
-      <div className="bg-white rounded-3xl border border-[#CBD5E1] p-6 sm:p-8 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-[#7C3AED] bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100">
-              Monthly Alumni Outreach Target Goal
-            </span>
-            <h2 className="text-xl font-extrabold text-slate-900 mt-2">
-              Performance for {currentMonthLabel} {year}
+      {/* 1. Alumni Outreach & Recruitment: Dedicated Count Buttons */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#7C3AED]"></span>
+            <h2 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+              Alumni Outreach & Recruitment Breakdown
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Only approved <strong>Alumni members</strong> count toward achieving this target. Student members are auto-approved.
-            </p>
           </div>
-
-          <div className="text-right">
-            <span className="text-xs text-slate-400 font-bold uppercase">Alumni Goal Status</span>
-            <p className="text-lg font-extrabold text-[#7C3AED]">
-              {kpis.monthly_approved || 0} / {kpis.target_members || 0} Alumni Recruited
-            </p>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-400 font-medium">Click any count button to view list</span>
           </div>
         </div>
 
-        <div className="mt-6 space-y-4">
-          <ProgressBar
-            current={kpis.monthly_approved || 0}
-            target={kpis.target_members || 0}
-            size="lg"
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="Actual Alumni"
+            value={kpis.actual_alumni || 0}
+            subtitle="Verified alumni network"
+            icon={Users}
+            color="purple"
+            badge={`${kpis.progress_percent || 0}% Goal`}
+            clickable={true}
+            onClick={() => navigate('/coordinator/members?type=alumni')}
           />
+          <StatCard
+            title="Target Goal"
+            value={kpis.target_members || 0}
+            subtitle="Recruitment target"
+            icon={Target}
+            color="indigo"
+            clickable={true}
+            onClick={() => navigate('/coordinator/action-plan')}
+          />
+          <StatCard
+            title="New Members"
+            value={kpis.monthly_approved || kpis.portal_approved_alumni || 0}
+            subtitle="Portal verified additions"
+            icon={CheckCircle2}
+            color="emerald"
+            badge="Verified"
+            clickable={true}
+            onClick={() => navigate('/coordinator/members?type=alumni&status=approved&enrollment=new')}
+          />
+          <StatCard
+            title="Pending Approvals"
+            value={kpis.monthly_pending || 0}
+            subtitle="Awaiting admin review"
+            icon={AlertCircle}
+            color="amber"
+            badge={kpis.monthly_pending > 0 ? `${kpis.monthly_pending} Pending` : 'Zero Pending'}
+            clickable={true}
+            onClick={() => navigate('/coordinator/members?type=alumni&status=pending')}
+          />
+        </div>
+      </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/60">
-              <p className="text-[11px] font-bold uppercase text-slate-400">Target Goal</p>
-              <p className="text-2xl font-extrabold text-slate-900 mt-0.5">{kpis.target_members || 0}</p>
+      {/* 2. Event Activities & Completion: Dedicated Count Buttons */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#16A34A]"></span>
+            <h2 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+              Event Activities & Completion Breakdown
+            </h2>
+          </div>
+          <span className="text-[11px] text-slate-400 font-medium">Click any count button to filter events</span>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="Events Completed"
+            value={kpis.actual_completed_events || 0}
+            subtitle="Conducted activities"
+            icon={Award}
+            color="emerald"
+            badge="Conducted"
+            clickable={true}
+            onClick={() => navigate('/coordinator/events?status=COMPLETED')}
+          />
+          <StatCard
+            title="Target Events"
+            value={kpis.target_events || 0}
+            subtitle="Goal for period"
+            icon={Target}
+            color="indigo"
+            clickable={true}
+            onClick={() => navigate('/coordinator/events')}
+          />
+          <StatCard
+            title="New Portal Events"
+            value={kpis.portal_completed_events || 0}
+            subtitle="Completed this period"
+            icon={Calendar}
+            color="purple"
+            clickable={true}
+            onClick={() => navigate('/coordinator/events?status=COMPLETED')}
+          />
+          <StatCard
+            title="Planned Events"
+            value={kpis.planned_events || 0}
+            subtitle="Scheduled upcoming"
+            icon={Clock}
+            color="amber"
+            clickable={true}
+            onClick={() => navigate('/coordinator/events?status=PLANNED')}
+          />
+        </div>
+      </div>
+
+      {/* Target Progress Dual-Grid Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Alumni Outreach Progress Card */}
+        <div className="bg-white rounded-3xl border border-[#CBD5E1] p-6 sm:p-8 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-start justify-between gap-4 pb-5 border-b border-slate-100">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-[#7C3AED] bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100">
+                  Alumni Outreach Performance
+                </span>
+                <h2 className="text-xl font-extrabold text-slate-900 mt-2">
+                  Alumni Target • {currentMonthLabel} {year}
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Actual Alumni: <strong>{kpis.existing_alumni || 0} Baseline</strong> + <strong>{kpis.monthly_approved || 0} Portal Approved</strong>
+                </p>
+              </div>
+
+              <div className="text-right">
+                <span className="text-[11px] text-slate-400 font-bold uppercase">Added / Target</span>
+                <p className="text-lg font-extrabold text-[#7C3AED]">
+                  {kpis.monthly_approved || 0} / {kpis.target_members || 0}
+                </p>
+              </div>
             </div>
-            <div className="p-3.5 bg-emerald-50/70 rounded-2xl border border-emerald-100">
-              <p className="text-[11px] font-bold uppercase text-[#16A34A]">Approved Alumni</p>
-              <p className="text-2xl font-extrabold text-[#16A34A] mt-0.5">{kpis.monthly_approved || 0}</p>
+
+            <div className="mt-5 space-y-4">
+              <ProgressBar
+                current={kpis.monthly_approved || 0}
+                target={kpis.target_members || 0}
+                size="lg"
+                unit="new members"
+              />
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                <div className="p-3 bg-purple-50/70 rounded-2xl border border-purple-100">
+                  <p className="text-[10px] font-bold uppercase text-[#7C3AED]">Actual Alumni</p>
+                  <p className="text-xl font-extrabold text-[#7C3AED] mt-0.5">{kpis.actual_alumni || 0}</p>
+                  <p className="text-[9px] text-purple-600 font-medium">verified</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/60">
+                  <p className="text-[10px] font-bold uppercase text-slate-400">Target Goal</p>
+                  <p className="text-xl font-extrabold text-slate-900 mt-0.5">{kpis.target_members || 0}</p>
+                  <p className="text-[9px] text-slate-400 font-medium">target</p>
+                </div>
+                <div className="p-3 bg-emerald-50/70 rounded-2xl border border-emerald-100">
+                  <p className="text-[10px] font-bold uppercase text-[#16A34A]">New Added</p>
+                  <p className="text-xl font-extrabold text-[#16A34A] mt-0.5">{kpis.monthly_approved || 0}</p>
+                  <p className="text-[9px] text-emerald-600 font-medium">this month</p>
+                </div>
+                <div className="p-3 bg-amber-50/70 rounded-2xl border border-amber-100">
+                  <p className="text-[10px] font-bold uppercase text-amber-700">Pending</p>
+                  <p className="text-xl font-extrabold text-amber-700 mt-0.5">{kpis.monthly_pending || 0}</p>
+                  <p className="text-[9px] text-amber-600 font-medium">review</p>
+                </div>
+              </div>
             </div>
-            <div className="p-3.5 bg-amber-50/70 rounded-2xl border border-amber-100">
-              <p className="text-[11px] font-bold uppercase text-amber-700">Pending Review</p>
-              <p className="text-2xl font-extrabold text-amber-700 mt-0.5">{kpis.monthly_pending || 0}</p>
+          </div>
+        </div>
+
+        {/* Events Conducted Progress Card */}
+        <div className="bg-white rounded-3xl border border-[#CBD5E1] p-6 sm:p-8 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-start justify-between gap-4 pb-5 border-b border-slate-100">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-[#7C3AED] bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100">
+                  Events Completion Performance
+                </span>
+                <h2 className="text-xl font-extrabold text-slate-900 mt-2">
+                  Completed Activities • {currentMonthLabel} {year}
+                </h2>
+              </div>
+
+              <div className="text-right">
+                <span className="text-[11px] text-slate-400 font-bold uppercase">Completed / Target</span>
+                <p className="text-lg font-extrabold text-[#7C3AED]">
+                  {kpis.portal_completed_events || 0} / {kpis.target_events || kpis.total_events || 0}
+                </p>
+              </div>
             </div>
-            <div className="p-3.5 bg-purple-50/70 rounded-2xl border border-purple-100">
-              <p className="text-[11px] font-bold uppercase text-[#7C3AED]">Remaining to Goal</p>
-              <p className="text-2xl font-extrabold text-[#7C3AED] mt-0.5">{kpis.remaining_target || 0}</p>
+
+            <div className="mt-5 space-y-4">
+              <ProgressBar
+                current={kpis.portal_completed_events || 0}
+                target={kpis.target_events || kpis.total_events || 0}
+                size="lg"
+                unit="events"
+              />
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                <div className="p-3 bg-emerald-50/70 rounded-2xl border border-emerald-100">
+                  <p className="text-[10px] font-bold uppercase text-[#16A34A]">Completed</p>
+                  <p className="text-xl font-extrabold text-[#16A34A] mt-0.5">{kpis.actual_completed_events || 0}</p>
+                  <p className="text-[9px] text-emerald-600 font-medium">actual total</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/60">
+                  <p className="text-[10px] font-bold uppercase text-slate-400">Target Events</p>
+                  <p className="text-xl font-extrabold text-slate-900 mt-0.5">{kpis.target_events || kpis.total_events || 0}</p>
+                  <p className="text-[9px] text-slate-400 font-medium">target</p>
+                </div>
+                <div className="p-3 bg-purple-50/70 rounded-2xl border border-purple-100">
+                  <p className="text-[10px] font-bold uppercase text-[#7C3AED]">New Portal</p>
+                  <p className="text-xl font-extrabold text-[#7C3AED] mt-0.5">{kpis.portal_completed_events || 0}</p>
+                  <p className="text-[9px] text-purple-600 font-medium">this month</p>
+                </div>
+                <div className="p-3 bg-sky-50/70 rounded-2xl border border-sky-100">
+                  <p className="text-[10px] font-bold uppercase text-sky-700">Scheduled</p>
+                  <p className="text-xl font-extrabold text-sky-700 mt-0.5">{kpis.planned_events || 0}</p>
+                  <p className="text-[9px] text-sky-600 font-medium">planned</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -259,9 +464,6 @@ export const CoordinatorDashboard = () => {
             <h2 className="text-base font-bold text-slate-900">
               Activities & Events Overview • {dashboardData?.events?.length || 0} Events
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Showing scheduled activities for {currentMonthLabel} {year}.
-            </p>
           </div>
           <button
             onClick={() => navigate('/coordinator/events')}
@@ -338,6 +540,95 @@ export const CoordinatorDashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Club Baseline Data Modal */}
+      <Modal
+        isOpen={isBaselineModalOpen}
+        onClose={() => {
+          setIsBaselineModalOpen(false);
+          setBaselineSuccessMsg('');
+        }}
+        title="Configure Club Baseline Counts"
+        subtitle={`Set pre-existing alumni members and historical completed events for ${dashboardData?.club?.club_name || 'your club'}`}
+      >
+        <form onSubmit={handleSaveBaseline} className="space-y-5">
+          {baselineSuccessMsg && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-[#16A34A] rounded-xl text-xs font-bold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{baselineSuccessMsg}</span>
+            </div>
+          )}
+
+
+          <div className="p-4 bg-purple-50/60 rounded-2xl border border-purple-100 text-xs text-purple-900 leading-relaxed space-y-1">
+            <p className="font-bold flex items-center gap-1.5 text-[#7C3AED]">
+              <Database className="w-3.5 h-3.5" />
+              <span>Paper / Historical Baseline Counts</span>
+            </p>
+            <p className="text-slate-600">
+              For historical paper records that have not been individually registered into the portal yet, you can maintain their baseline counts below. They will automatically be added to your <strong>Actual Alumni</strong> and <strong>Actual Completed Events</strong> totals.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Existing / Historical Alumni Member Count <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="10000"
+                value={existingAlumniInput}
+                onChange={(e) => setExistingAlumniInput(e.target.value)}
+                required
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-[#CBD5E1] rounded-xl text-sm font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 focus:border-[#7C3AED]"
+                placeholder="e.g. 15"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Total alumni registered in club records before portal adoption.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Already Completed Events Count <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="1000"
+                value={existingEventsInput}
+                onChange={(e) => setExistingEventsInput(e.target.value)}
+                required
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-[#CBD5E1] rounded-xl text-sm font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 focus:border-[#7C3AED]"
+                placeholder="e.g. 4"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Club activities and events already conducted and completed in previous terms.
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setIsBaselineModalOpen(false)}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={savingBaseline}
+              className="px-5 py-2.5 bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-xs font-bold rounded-xl shadow-sm shadow-[#7C3AED]/20 transition-all flex items-center gap-2"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{savingBaseline ? 'Saving...' : 'Save Baseline Counts'}</span>
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Remarks Modal */}
       <RemarksModal

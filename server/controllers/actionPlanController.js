@@ -17,6 +17,9 @@ async function getActionPlans(req, res) {
         p.month,
         p.year,
         p.target_members,
+        p.target_events,
+        c.existing_alumni_count,
+        c.existing_events_completed_count,
         p.created_at,
         p.updated_at
       FROM monthly_action_plans p
@@ -57,7 +60,6 @@ async function getActionPlans(req, res) {
 
         // Fetch members added for this club in this month & year
         // NOTE: As per requirements, target strictly measures Alumni member additions
-        const formattedMonth = String(plan.month).padStart(2, '0');
         const [memberStats] = await query(
           `SELECT 
             COUNT(CASE WHEN member_type = 'ALUMNI' AND status = 'APPROVED' THEN 1 END) AS approved_alumni_count,
@@ -66,9 +68,9 @@ async function getActionPlans(req, res) {
             COUNT(*) AS total_added
            FROM members 
            WHERE club_id = ? 
-             AND (strftime('%Y', created_at) = ? OR YEAR(created_at) = ?)
-             AND (strftime('%m', created_at) = ? OR MONTH(created_at) = ?)`,
-          [plan.club_id, String(plan.year), Number(plan.year), formattedMonth, Number(plan.month)]
+             AND YEAR(created_at) = ?
+             AND MONTH(created_at) = ?`,
+          [plan.club_id, Number(plan.year), Number(plan.month)]
         );
 
         const approvedAlumni = memberStats[0]?.approved_alumni_count || 0;
@@ -78,16 +80,29 @@ async function getActionPlans(req, res) {
         const remaining = Math.max(0, target - approvedAlumni);
         const progress = target > 0 ? Math.min(100, Math.round((approvedAlumni / target) * 100)) : (approvedAlumni > 0 ? 100 : 0);
 
+        const existingAlumni = Number(plan.existing_alumni_count) || 0;
+        const actualAlumni = existingAlumni + approvedAlumni;
+        const existingEvents = Number(plan.existing_events_completed_count) || 0;
+        const completedEvents = events.filter(e => e.status === 'COMPLETED').length;
+        const actualCompletedEvents = existingEvents + completedEvents;
+        const targetEvents = Number(plan.target_events) || events.length;
+
         return {
           ...plan,
+          existing_alumni_count: existingAlumni,
           approved_members: approvedAlumni, // Target progress based on approved alumni
           approved_alumni: approvedAlumni,
+          actual_alumni: actualAlumni,
           pending_members: pendingAlumni,
           pending_alumni: pendingAlumni,
           student_members: studentCount,
           total_members: memberStats[0]?.total_added || 0,
           remaining_target: remaining,
           progress_percent: progress,
+          existing_events_completed_count: existingEvents,
+          completed_events: completedEvents,
+          actual_completed_events: actualCompletedEvents,
+          target_events: targetEvents,
           events_count: events.length,
           events
         };
@@ -107,7 +122,7 @@ async function upsertActionPlan(req, res) {
       return res.status(403).json({ success: false, message: 'Forbidden. Members have read-only access.' });
     }
 
-    let { club_id, month, year, target_members } = req.body;
+    let { club_id, month, year, target_members, target_events } = req.body;
 
     if (req.user.role === 'COORDINATOR') {
       club_id = req.user.club_id;
@@ -119,7 +134,8 @@ async function upsertActionPlan(req, res) {
 
     month = Number(month);
     year = Number(year);
-    target_members = Number(target_members) || 0;
+    target_members = Math.max(0, Number(target_members) || 0);
+    target_events = Math.max(0, Number(target_events) || 0);
 
     // Check if an action plan already exists for this club & month/year
     const [existing] = await query(
@@ -132,15 +148,15 @@ async function upsertActionPlan(req, res) {
       planId = existing[0].id;
       await query(
         `UPDATE monthly_action_plans 
-         SET target_members = ?, updated_at = CURRENT_TIMESTAMP 
+         SET target_members = ?, target_events = ?, updated_at = CURRENT_TIMESTAMP 
          WHERE id = ?`,
-        [target_members, planId]
+        [target_members, target_events, planId]
       );
     } else {
       const [result] = await query(
-        `INSERT INTO monthly_action_plans (club_id, month, year, target_members) 
-         VALUES (?, ?, ?, ?)`,
-        [club_id, month, year, target_members]
+        `INSERT INTO monthly_action_plans (club_id, month, year, target_members, target_events) 
+         VALUES (?, ?, ?, ?, ?)`,
+        [club_id, month, year, target_members, target_events]
       );
       planId = result.insertId;
     }
@@ -152,7 +168,8 @@ async function upsertActionPlan(req, res) {
       club_id,
       month,
       year,
-      target_members
+      target_members,
+      target_events
     });
   } catch (err) {
     console.error('upsertActionPlan error:', err);

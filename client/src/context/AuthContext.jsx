@@ -52,6 +52,14 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const updateUser = (updatedFields) => {
+    setUser((prev) => {
+      const updated = { ...prev, ...updatedFields };
+      localStorage.setItem('user', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const isAdmin = user?.role === 'ADMIN';
   const isCoordinator = user?.role === 'COORDINATOR';
   const isMember = user?.role === 'MEMBER';
@@ -64,6 +72,7 @@ export const AuthProvider = ({ children }) => {
         loading,
         login,
         logout,
+        updateUser,
         isAdmin,
         isCoordinator,
         isMember,

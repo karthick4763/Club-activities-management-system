@@ -117,9 +117,6 @@ export const AllClubs = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Club Workspaces
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Clubs assigned to student coordinators with independent workspaces • {clubs.length} Clubs
-          </p>
         </div>
 
         <button

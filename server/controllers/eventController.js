@@ -20,12 +20,12 @@ async function getEvents(req, res) {
         r.file_name AS report_file_name,
         r.file_path AS report_file_path,
         r.uploaded_at AS report_uploaded_at,
-        COUNT(res.id) AS reschedule_count
+        COALESCE(res.reschedule_count, 0) AS reschedule_count
       FROM events e
       JOIN clubs c ON e.club_id = c.id
       JOIN monthly_action_plans p ON e.action_plan_id = p.id
       LEFT JOIN reports r ON r.event_id = e.id
-      LEFT JOIN event_reschedules res ON res.event_id = e.id
+      LEFT JOIN (SELECT event_id, COUNT(*) AS reschedule_count FROM event_reschedules GROUP BY event_id) res ON res.event_id = e.id
       WHERE 1=1
     `;
 
@@ -47,17 +47,16 @@ async function getEvents(req, res) {
     }
 
     if (year && year !== 'ALL') {
-      sql += ` AND (strftime('%Y', e.event_date) = ? OR YEAR(e.event_date) = ?)`;
-      params.push(String(year), Number(year));
+      sql += ` AND YEAR(e.event_date) = ?`;
+      params.push(Number(year));
     }
 
     if (month && month !== 'ALL') {
-      const formattedMonth = String(month).padStart(2, '0');
-      sql += ` AND (strftime('%m', e.event_date) = ? OR MONTH(e.event_date) = ?)`;
-      params.push(formattedMonth, Number(month));
+      sql += ` AND MONTH(e.event_date) = ?`;
+      params.push(Number(month));
     }
 
-    sql += ` GROUP BY e.id ORDER BY e.event_date ASC, e.event_time ASC`;
+    sql += ` ORDER BY e.event_date ASC, e.event_time ASC`;
 
     const [events] = await query(sql, params);
     return res.status(200).json({ success: true, count: events.length, events });

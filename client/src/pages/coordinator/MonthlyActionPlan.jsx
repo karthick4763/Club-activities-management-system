@@ -42,6 +42,7 @@ export const MonthlyActionPlan = () => {
   const [year, setYear] = useState(2026);
   const [plan, setPlan] = useState(null);
   const [targetInput, setTargetInput] = useState(0);
+  const [targetEventsInput, setTargetEventsInput] = useState(0);
   const [savingTarget, setSavingTarget] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedRemarksEvent, setSelectedRemarksEvent] = useState(null);
@@ -74,9 +75,11 @@ export const MonthlyActionPlan = () => {
         const currentPlan = res.data.plans[0];
         setPlan(currentPlan);
         setTargetInput(currentPlan.target_members || 0);
+        setTargetEventsInput(currentPlan.target_events || 0);
       } else {
         setPlan(null);
         setTargetInput(0);
+        setTargetEventsInput(0);
       }
     } catch (err) {
       console.error('Error fetching action plan:', err);
@@ -96,11 +99,12 @@ export const MonthlyActionPlan = () => {
       await axiosClient.post('/action-plans', {
         month,
         year,
-        target_members: Number(targetInput)
+        target_members: Number(targetInput),
+        target_events: Number(targetEventsInput)
       });
       fetchActionPlan();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update target');
+      alert(err.response?.data?.message || 'Failed to update targets');
     } finally {
       setSavingTarget(false);
     }
@@ -220,9 +224,6 @@ export const MonthlyActionPlan = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Monthly Action Plan & Target Planner
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Define recruitment targets and organize events for {user?.club_name}.
-          </p>
         </div>
 
         {/* Month & Year Selector */}
@@ -251,22 +252,19 @@ export const MonthlyActionPlan = () => {
 
       {/* Target Management Card */}
       <div className="bg-white rounded-3xl border border-[#CBD5E1] p-6 sm:p-8 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-100">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-[#7C3AED] bg-[#EDE9FE] px-2.5 py-1 rounded-full border border-[#DDD6FE]">
-              Monthly Alumni Outreach Target
+              Monthly Activity & Target Planner
             </span>
-            <h2 className="text-xl font-extrabold text-slate-900 mt-2">
-              {currentMonthName} {year} Alumni Target
+            <h2 className="text-xl font-extrabold text-slate-900 mt-1.5">
+              {currentMonthName} {year} Action Plan Goals
             </h2>
-            <p className="text-xs text-slate-500 mt-1">
-              Only approved <strong>Alumni members</strong> count toward target completion. Students are auto-approved.
-            </p>
           </div>
 
-          {/* Form to update target (Coordinators Only) */}
+          {/* Form to update targets (Coordinators Only) */}
           {!isMember ? (
-            <form onSubmit={handleSaveTarget} className="flex items-center gap-3">
+            <form onSubmit={handleSaveTarget} className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2 bg-slate-50 border border-[#CBD5E1] rounded-xl px-3 py-1.5">
                 <label className="text-xs font-bold text-slate-500">Alumni Target:</label>
                 <input
@@ -276,6 +274,20 @@ export const MonthlyActionPlan = () => {
                   value={targetInput}
                   onChange={(e) => setTargetInput(e.target.value)}
                   className="w-16 bg-white border border-[#CBD5E1] rounded-lg px-2 py-1 text-center text-sm font-extrabold text-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 focus:border-[#7C3AED]"
+                  title="Alumni recruitment target for this month"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 bg-slate-50 border border-[#CBD5E1] rounded-xl px-3 py-1.5">
+                <label className="text-xs font-bold text-slate-500">Events Target:</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={targetEventsInput}
+                  onChange={(e) => setTargetEventsInput(e.target.value)}
+                  className="w-16 bg-white border border-[#CBD5E1] rounded-lg px-2 py-1 text-center text-sm font-extrabold text-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 focus:border-[#7C3AED]"
+                  title="Target number of events to conduct this month"
                 />
               </div>
 
@@ -285,41 +297,102 @@ export const MonthlyActionPlan = () => {
                 className="px-4 py-2 bg-[#7C3AED] hover:bg-[#6D28D9] text-white rounded-xl text-xs font-bold shadow-sm shadow-[#7C3AED]/20 transition-colors flex items-center gap-1.5"
               >
                 <Save className="w-3.5 h-3.5" />
-                <span>{savingTarget ? 'Saving...' : 'Save Alumni Target'}</span>
+                <span>{savingTarget ? 'Saving...' : 'Save Targets'}</span>
               </button>
             </form>
           ) : (
-            <div className="flex items-center gap-2 bg-[#EDE9FE] border border-[#DDD6FE] rounded-2xl px-4 py-2 text-[#7C3AED]">
-              <Target className="w-4 h-4 text-[#7C3AED]" />
-              <span className="text-xs font-bold">Target Goal: {plan?.target_members || 0}</span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 bg-[#EDE9FE] border border-[#DDD6FE] rounded-2xl px-4 py-2 text-[#7C3AED]">
+                <Target className="w-4 h-4 text-[#7C3AED]" />
+                <span className="text-xs font-bold">Alumni Goal: {plan?.target_members || 0}</span>
+              </div>
+              <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-2xl px-4 py-2 text-[#7C3AED]">
+                <CalendarDays className="w-4 h-4 text-[#7C3AED]" />
+                <span className="text-xs font-bold">Events Goal: {plan?.target_events || 0}</span>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Progress Display */}
-        <div className="mt-6 space-y-4">
-          <ProgressBar
-            current={plan?.approved_members || 0}
-            target={plan?.target_members || 0}
-            size="lg"
-          />
+        {/* Dual Progress Display: Alumni & Events */}
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Alumni Progress */}
+          <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">
+                Alumni Goal Progress
+              </span>
+              <span className="text-xs font-extrabold text-[#7C3AED]">
+                {plan?.approved_members || 0} Added / {plan?.target_members || 0} Target
+              </span>
+            </div>
+            <ProgressBar
+              current={plan?.approved_members || 0}
+              target={plan?.target_members || 0}
+              size="md"
+              unit="new members"
+            />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pt-1">
+              <div className="bg-purple-50/70 p-2 rounded-xl border border-purple-100">
+                <p className="text-[10px] font-bold uppercase text-[#7C3AED]">Actual Alumni</p>
+                <p className="text-base font-extrabold text-[#7C3AED]">{(plan?.existing_alumni_count || 0) + (plan?.approved_members || 0)}</p>
+                <p className="text-[9px] text-purple-600">verified</p>
+              </div>
+              <div className="bg-white p-2 rounded-xl border border-slate-200/60">
+                <p className="text-[10px] font-bold uppercase text-slate-400">Target Goal</p>
+                <p className="text-base font-extrabold text-slate-900">{plan?.target_members || 0}</p>
+                <p className="text-[9px] text-slate-400">target</p>
+              </div>
+              <div className="bg-emerald-50 p-2 rounded-xl border border-emerald-100">
+                <p className="text-[10px] font-bold uppercase text-emerald-700">New Added</p>
+                <p className="text-base font-extrabold text-[#16A34A]">{plan?.approved_members || 0}</p>
+                <p className="text-[9px] text-emerald-600">this month</p>
+              </div>
+              <div className="bg-amber-50 p-2 rounded-xl border border-amber-100">
+                <p className="text-[10px] font-bold uppercase text-amber-700">Pending</p>
+                <p className="text-base font-extrabold text-amber-700">{plan?.pending_members || 0}</p>
+                <p className="text-[9px] text-amber-600">review</p>
+              </div>
+            </div>
+          </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/60">
-              <p className="text-[11px] font-bold uppercase text-slate-400">Target Goal</p>
-              <p className="text-xl font-extrabold text-slate-900 mt-0.5">{plan?.target_members || 0}</p>
+          {/* Events Progress */}
+          <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">
+                Events Completion Progress
+              </span>
+              <span className="text-xs font-extrabold text-[#7C3AED]">
+                {plan?.events?.filter(e => e.status === 'COMPLETED').length || 0} Completed / {plan?.target_events || plan?.events?.length || 0} Target
+              </span>
             </div>
-            <div className="p-3 bg-emerald-50/70 rounded-2xl border border-emerald-100">
-              <p className="text-[11px] font-bold uppercase text-[#16A34A]">Approved Alumni</p>
-              <p className="text-xl font-extrabold text-[#16A34A] mt-0.5">{plan?.approved_members || 0}</p>
-            </div>
-            <div className="p-3 bg-amber-50/70 rounded-2xl border border-amber-100">
-              <p className="text-[11px] font-bold uppercase text-amber-700">Pending Review</p>
-              <p className="text-xl font-extrabold text-amber-700 mt-0.5">{plan?.pending_members || 0}</p>
-            </div>
-            <div className="p-3 bg-purple-50/70 rounded-2xl border border-purple-100">
-              <p className="text-[11px] font-bold uppercase text-[#7C3AED]">Remaining to Goal</p>
-              <p className="text-xl font-extrabold text-[#7C3AED] mt-0.5">{plan?.remaining_target || 0}</p>
+            <ProgressBar
+              current={plan?.events?.filter(e => e.status === 'COMPLETED').length || 0}
+              target={plan?.target_events || plan?.events?.length || 0}
+              size="md"
+              unit="events"
+            />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pt-1">
+              <div className="bg-emerald-50/70 p-2 rounded-xl border border-emerald-100">
+                <p className="text-[10px] font-bold uppercase text-[#16A34A]">Completed</p>
+                <p className="text-base font-extrabold text-[#16A34A]">{(plan?.existing_events_completed_count || 0) + (plan?.events?.filter(e => e.status === 'COMPLETED').length || 0)}</p>
+                <p className="text-[9px] text-emerald-600">actual total</p>
+              </div>
+              <div className="bg-white p-2 rounded-xl border border-slate-200/60">
+                <p className="text-[10px] font-bold uppercase text-slate-400">Target Events</p>
+                <p className="text-base font-extrabold text-slate-900">{plan?.target_events || plan?.events?.length || 0}</p>
+                <p className="text-[9px] text-slate-400">target</p>
+              </div>
+              <div className="bg-purple-50/70 p-2 rounded-xl border border-purple-100">
+                <p className="text-[10px] font-bold uppercase text-[#7C3AED]">New Portal</p>
+                <p className="text-base font-extrabold text-[#7C3AED]">{plan?.events?.filter(e => e.status === 'COMPLETED').length || 0}</p>
+                <p className="text-[9px] text-purple-600">this month</p>
+              </div>
+              <div className="bg-sky-50 p-2 rounded-xl border border-sky-100">
+                <p className="text-[10px] font-bold uppercase text-sky-700">Scheduled</p>
+                <p className="text-base font-extrabold text-sky-700">{plan?.events?.filter(e => e.status === 'PLANNED').length || 0}</p>
+                <p className="text-[9px] text-sky-600">planned</p>
+              </div>
             </div>
           </div>
         </div>
@@ -327,14 +400,11 @@ export const MonthlyActionPlan = () => {
 
       {/* Events Section */}
       <div className="bg-white rounded-3xl border border-[#CBD5E1] shadow-sm overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div>
             <h3 className="text-base font-bold text-slate-900">
               Action Plan Activities & Events • {plan?.events?.length || 0} Events
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Activities scheduled under this monthly plan.
-            </p>
           </div>
 
           {!isMember && (

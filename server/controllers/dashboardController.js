@@ -22,12 +22,12 @@ async function getAdminDashboard(req, res) {
       memberParams.push(category);
     }
     if (!isAllYears) {
-      memberWhere += ` AND (strftime('%Y', m.created_at) = ? OR YEAR(m.created_at) = ?)`;
-      memberParams.push(String(selectedYear), selectedYear);
+      memberWhere += ` AND YEAR(m.created_at) = ?`;
+      memberParams.push(Number(selectedYear));
     }
     if (!isWholeYear) {
-      memberWhere += ` AND (strftime('%m', m.created_at) = ? OR MONTH(m.created_at) = ?)`;
-      memberParams.push(formattedMonth, selectedMonth);
+      memberWhere += ` AND MONTH(m.created_at) = ?`;
+      memberParams.push(Number(selectedMonth));
     }
 
     // Dynamic Filtered Member Counts
@@ -37,6 +37,8 @@ async function getAdminDashboard(req, res) {
         COUNT(CASE WHEN m.member_type = 'STUDENT' THEN 1 END) AS student_members,
         COUNT(CASE WHEN m.member_type = 'ALUMNI' THEN 1 END) AS alumni_members,
         COUNT(CASE WHEN m.member_type = 'ALUMNI' AND m.status = 'APPROVED' THEN 1 END) AS approved_alumni,
+        COUNT(CASE WHEN m.member_type = 'ALUMNI' AND m.status = 'APPROVED' AND m.is_existing = 1 THEN 1 END) AS portal_existing_alumni,
+        COUNT(CASE WHEN m.member_type = 'ALUMNI' AND m.status = 'APPROVED' AND (m.is_existing = 0 OR m.is_existing IS NULL) THEN 1 END) AS portal_new_alumni,
         COUNT(CASE WHEN m.status = 'APPROVED' THEN 1 END) AS approved_members,
         COUNT(CASE WHEN m.status = 'PENDING' THEN 1 END) AS pending_approvals,
         COUNT(CASE WHEN m.status = 'REJECTED' THEN 1 END) AS rejected_members
@@ -58,12 +60,12 @@ async function getAdminDashboard(req, res) {
       eventCountParams.push(category);
     }
     if (!isAllYears) {
-      eventWhere += ` AND (strftime('%Y', e.event_date) = ? OR YEAR(e.event_date) = ?)`;
-      eventCountParams.push(String(selectedYear), selectedYear);
+      eventWhere += ` AND YEAR(e.event_date) = ?`;
+      eventCountParams.push(Number(selectedYear));
     }
     if (!isWholeYear) {
-      eventWhere += ` AND (strftime('%m', e.event_date) = ? OR MONTH(e.event_date) = ?)`;
-      eventCountParams.push(formattedMonth, selectedMonth);
+      eventWhere += ` AND MONTH(e.event_date) = ?`;
+      eventCountParams.push(Number(selectedMonth));
     }
     if (status && status !== 'ALL') {
       eventWhere += ` AND UPPER(e.status) = ?`;
@@ -103,22 +105,46 @@ async function getAdminDashboard(req, res) {
     }
 
     const [planTargetCounts] = await query(
-      `SELECT SUM(p.target_members) AS total_target
+      `SELECT 
+        SUM(p.target_members) AS total_target,
+        SUM(p.target_events) AS total_events_target
        FROM monthly_action_plans p
        JOIN clubs c ON p.club_id = c.id
        ${planWhere}`,
       planCountParams
     );
     const dynamicTarget = Number(planTargetCounts[0]?.total_target) || 0;
+    const dynamicEventsTarget = Number(planTargetCounts[0]?.total_events_target) || 0;
+
+    // Baseline counts for filtered clubs
+    let baselineWhere = 'WHERE 1=1';
+    const baselineParams = [];
+    if (club_id && club_id !== 'ALL') {
+      baselineWhere += ' AND id = ?';
+      baselineParams.push(Number(club_id));
+    }
+    if (category && category !== 'ALL') {
+      baselineWhere += ' AND category = ?';
+      baselineParams.push(category);
+    }
+    const [baselineStats] = await query(
+      `SELECT 
+        SUM(existing_alumni_count) AS total_existing_alumni, 
+        SUM(existing_events_completed_count) AS total_existing_events 
+       FROM clubs ${baselineWhere}`,
+      baselineParams
+    );
+    const existingAlumniTotal = Number(baselineStats[0]?.total_existing_alumni) || 0;
+    const existingEventsTotal = Number(baselineStats[0]?.total_existing_events) || 0;
 
     const [clubCount] = await query('SELECT COUNT(*) AS total FROM clubs');
     const [reportCounts] = await query('SELECT COUNT(*) AS total_reports FROM reports');
 
     // 2. Full list of all clubs (always preserved for filter dropdowns)
-    const [clubsList] = await query('SELECT id, club_name, category FROM clubs ORDER BY club_name ASC');
+    const [clubsList] = await query('SELECT id, club_name, category, existing_alumni_count, existing_events_completed_count FROM clubs ORDER BY club_name ASC');
 
     // Club Performance Summary for Selected Year / Month
-    let clubsSql = 'SELECT id, club_name, category FROM clubs WHERE 1=1';
+    let clubsSql = 'SELECT id, club_name, category, existing_alumni_count, existing_events_completed_count FROM clubs WHERE 1=1';
     const clubsParams = [];
     if (club_id && club_id !== 'ALL') {
       clubsSql += ' AND id = ?';
@@ -135,7 +161,7 @@ async function getAdminDashboard(req, res) {
     const clubPerformance = await Promise.all(
       allClubs.map(async (c) => {
         // Fetch target: sum for all years / whole year if 'ALL', or for specific year/month
-        let planSql = `SELECT SUM(target_members) AS total_target FROM monthly_action_plans WHERE club_id = ?`;
+        let planSql = `SELECT SUM(target_members) AS total_target, SUM(target_events) AS total_events_target FROM monthly_action_plans WHERE club_id = ?`;
         const planParams = [c.id];
         if (!isAllYears) {
           planSql += ` AND year = ?`;
@@ -148,11 +174,14 @@ async function getAdminDashboard(req, res) {
 
         const [plan] = await query(planSql, planParams);
         const target = Number(plan[0]?.total_target) || 0;
+        const targetEv = Number(plan[0]?.total_events_target) || 0;
 
         // Fetch approved & pending alumni members for this club (Target is for Alumni)
         let memSql = `
           SELECT 
             COUNT(CASE WHEN member_type = 'ALUMNI' AND status = 'APPROVED' THEN 1 END) AS approved_alumni,
+            COUNT(CASE WHEN member_type = 'ALUMNI' AND status = 'APPROVED' AND is_existing = 1 THEN 1 END) AS portal_existing_alumni,
+            COUNT(CASE WHEN member_type = 'ALUMNI' AND status = 'APPROVED' AND (is_existing = 0 OR is_existing IS NULL) THEN 1 END) AS portal_new_alumni,
             COUNT(CASE WHEN member_type = 'ALUMNI' AND status = 'PENDING' THEN 1 END) AS pending_alumni,
             COUNT(CASE WHEN member_type = 'STUDENT' THEN 1 END) AS student_count,
             COUNT(*) AS total_count
@@ -161,37 +190,44 @@ async function getAdminDashboard(req, res) {
         `;
         const memParams = [c.id];
         if (!isAllYears) {
-          memSql += ` AND (strftime('%Y', created_at) = ? OR YEAR(created_at) = ?)`;
-          memParams.push(String(selectedYear), selectedYear);
+          memSql += ` AND YEAR(created_at) = ?`;
+          memParams.push(Number(selectedYear));
         }
         if (!isWholeYear) {
-          memSql += ` AND (strftime('%m', created_at) = ? OR MONTH(created_at) = ?)`;
-          memParams.push(formattedMonth, selectedMonth);
+          memSql += ` AND MONTH(created_at) = ?`;
+          memParams.push(Number(selectedMonth));
         }
 
         const [memStats] = await query(memSql, memParams);
-        const approvedAlumni = memStats[0]?.approved_alumni || 0;
+        const portalApprovedAlumni = memStats[0]?.approved_alumni || 0;
+        const portalExistingAlumni = memStats[0]?.portal_existing_alumni || 0;
+        const portalNewAlumni = memStats[0]?.portal_new_alumni || 0;
         const pendingAlumni = memStats[0]?.pending_alumni || 0;
         const studentCount = memStats[0]?.student_count || 0;
-        const totalCount = memStats[0]?.total_count || 0;
-        const progress = target > 0 ? Math.min(100, Math.round((approvedAlumni / target) * 100)) : (approvedAlumni > 0 ? 100 : 0);
+        const baselineAlumni = Number(c.existing_alumni_count) || 0;
+        const existingAlumni = baselineAlumni + portalExistingAlumni;
+        const actualAlumni = existingAlumni + portalNewAlumni;
+
+        const progress = target > 0 ? Math.min(100, Math.round((portalNewAlumni / target) * 100)) : (portalNewAlumni > 0 ? 100 : 0);
 
         // Fetch events count for this club
         let evSql = `
           SELECT 
             COUNT(*) AS total,
-            COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) AS completed
+            COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) AS completed,
+            COUNT(CASE WHEN status = 'PLANNED' THEN 1 END) AS planned,
+            COUNT(CASE WHEN status = 'RESCHEDULED' THEN 1 END) AS rescheduled
           FROM events 
           WHERE club_id = ?
         `;
         const evParams = [c.id];
         if (!isAllYears) {
-          evSql += ` AND (strftime('%Y', event_date) = ? OR YEAR(event_date) = ?)`;
-          evParams.push(String(selectedYear), selectedYear);
+          evSql += ` AND YEAR(event_date) = ?`;
+          evParams.push(Number(selectedYear));
         }
         if (!isWholeYear) {
-          evSql += ` AND (strftime('%m', event_date) = ? OR MONTH(event_date) = ?)`;
-          evParams.push(formattedMonth, selectedMonth);
+          evSql += ` AND MONTH(event_date) = ?`;
+          evParams.push(Number(selectedMonth));
         }
         if (status && status !== 'ALL') {
           evSql += ` AND UPPER(status) = ?`;
@@ -199,22 +235,35 @@ async function getAdminDashboard(req, res) {
         }
 
         const [evStats] = await query(evSql, evParams);
+        const existingEvents = Number(c.existing_events_completed_count) || 0;
+        const portalCompletedEvents = evStats[0]?.completed || 0;
+        const actualCompletedEvents = existingEvents + portalCompletedEvents;
+        const targetEvents = targetEv > 0 ? targetEv : (evStats[0]?.total || 0);
 
         return {
           club_id: c.id,
           club_name: c.club_name,
           category: c.category,
+          existing_alumni_count: existingAlumni,
+          portal_approved_alumni: portalApprovedAlumni,
+          actual_alumni: actualAlumni,
           target_members: target, // Alumni target
-          approved_members: approvedAlumni, // Approved alumni (counted for target)
-          approved_alumni: approvedAlumni,
+          approved_members: actualAlumni,
+          approved_alumni: actualAlumni,
           pending_members: pendingAlumni,
           pending_alumni: pendingAlumni,
           student_members: studentCount,
-          total_members: totalCount,
-          remaining_target: Math.max(0, target - approvedAlumni),
+          total_members: studentCount + actualAlumni,
+          remaining_target: Math.max(0, target - portalApprovedAlumni),
           progress_percent: progress,
+          existing_events_completed_count: existingEvents,
+          portal_completed_events: portalCompletedEvents,
+          actual_completed_events: actualCompletedEvents,
+          completed_events: actualCompletedEvents,
+          target_events: targetEvents,
           total_events: evStats[0]?.total || 0,
-          completed_events: evStats[0]?.completed || 0
+          planned_events: evStats[0]?.planned || 0,
+          rescheduled_events: evStats[0]?.rescheduled || 0
         };
       })
     );
@@ -228,11 +277,11 @@ async function getAdminDashboard(req, res) {
         r.id AS report_id,
         r.file_name AS report_file_name,
         r.uploaded_at AS report_uploaded_at,
-        COUNT(res.id) AS reschedule_count
+        COALESCE(res.reschedule_count, 0) AS reschedule_count
       FROM events e
       JOIN clubs c ON e.club_id = c.id
       LEFT JOIN reports r ON r.event_id = e.id
-      LEFT JOIN event_reschedules res ON res.event_id = e.id
+      LEFT JOIN (SELECT event_id, COUNT(*) AS reschedule_count FROM event_reschedules GROUP BY event_id) res ON res.event_id = e.id
       WHERE 1=1
     `;
     const eventParams = [];
@@ -246,18 +295,18 @@ async function getAdminDashboard(req, res) {
       eventParams.push(category);
     }
     if (!isAllYears) {
-      eventSql += ` AND (strftime('%Y', e.event_date) = ? OR YEAR(e.event_date) = ?)`;
-      eventParams.push(String(selectedYear), selectedYear);
+      eventSql += ` AND YEAR(e.event_date) = ?`;
+      eventParams.push(Number(selectedYear));
     }
     if (!isWholeYear) {
-      eventSql += ` AND (strftime('%m', e.event_date) = ? OR MONTH(e.event_date) = ?)`;
-      eventParams.push(formattedMonth, selectedMonth);
+      eventSql += ` AND MONTH(e.event_date) = ?`;
+      eventParams.push(Number(selectedMonth));
     }
     if (status && status !== 'ALL') {
       eventSql += ` AND UPPER(e.status) = ?`;
       eventParams.push(status.toUpperCase());
     }
-    eventSql += ` GROUP BY e.id ORDER BY e.event_date ASC, e.event_time ASC`;
+    eventSql += ` ORDER BY e.event_date ASC, e.event_time ASC`;
 
     const [filteredEvents] = await query(eventSql, eventParams);
 
@@ -271,20 +320,36 @@ async function getAdminDashboard(req, res) {
        ORDER BY m.created_at DESC`
     );
 
+    const adminPortalExistingAlumni = Number(filteredMemberCounts[0]?.portal_existing_alumni) || 0;
+    const adminPortalNewAlumni = Number(filteredMemberCounts[0]?.portal_new_alumni) || 0;
+    const adminTotalExistingAlumni = existingAlumniTotal + adminPortalExistingAlumni;
+    const adminActualAlumni = adminTotalExistingAlumni + adminPortalNewAlumni;
+
     return res.status(200).json({
       success: true,
       kpis: {
         total_clubs: clubsList.length,
-        total_members: filteredMemberCounts[0]?.total_members || 0,
+        total_members: (filteredMemberCounts[0]?.student_members || 0) + adminActualAlumni,
         student_members: filteredMemberCounts[0]?.student_members || 0,
-        alumni_members: filteredMemberCounts[0]?.alumni_members || 0,
-        approved_alumni: filteredMemberCounts[0]?.approved_alumni || 0,
+        existing_alumni: adminTotalExistingAlumni,
+        portal_existing_alumni: adminPortalExistingAlumni,
+        portal_new_alumni: adminPortalNewAlumni,
+        portal_approved_alumni: adminPortalNewAlumni,
+        monthly_approved: adminPortalNewAlumni,
+        actual_alumni: adminActualAlumni,
+        alumni_members: adminActualAlumni,
+        approved_alumni: adminActualAlumni,
         pending_member_approvals: filteredMemberCounts[0]?.pending_approvals || 0,
-        approved_members: filteredMemberCounts[0]?.approved_members || 0,
+        pending_alumni: filteredMemberCounts[0]?.pending_approvals || 0,
+        approved_members: (filteredMemberCounts[0]?.student_members || 0) + adminActualAlumni,
         rejected_members: filteredMemberCounts[0]?.rejected_members || 0,
         target_members: dynamicTarget,
+        existing_events_completed: existingEventsTotal,
+        portal_completed_events: filteredEventCounts[0]?.completed_events || 0,
+        actual_completed_events: existingEventsTotal + (filteredEventCounts[0]?.completed_events || 0),
+        completed_events: existingEventsTotal + (filteredEventCounts[0]?.completed_events || 0),
+        target_events: dynamicEventsTarget > 0 ? dynamicEventsTarget : (filteredEventCounts[0]?.total_events || 0),
         total_events: filteredEventCounts[0]?.total_events || 0,
-        completed_events: filteredEventCounts[0]?.completed_events || 0,
         planned_events: filteredEventCounts[0]?.planned_events || 0,
         rescheduled_events: filteredEventCounts[0]?.rescheduled_events || 0,
         total_reports: reportCounts[0]?.total_reports || 0
@@ -323,19 +388,24 @@ async function getCoordinatorDashboard(req, res) {
       return res.status(400).json({ success: false, message: 'Coordinator is not assigned to any club container.' });
     }
 
-    // 1. Club Details
+    // 1. Club Details (including baseline counts)
     const [clubData] = await query('SELECT * FROM clubs WHERE id = ?', [clubId]);
     if (!clubData || clubData.length === 0) {
       return res.status(404).json({ success: false, message: 'Club container not found.' });
     }
+    const currentClub = clubData[0];
+    const existingAlumni = Number(currentClub.existing_alumni_count) || 0;
+    const existingEventsCompleted = Number(currentClub.existing_events_completed_count) || 0;
 
-    // 2. Club Member KPIs (Overall all-time totals)
+    // 2. Club Member KPIs (Overall all-time totals from portal)
     const [memberStats] = await query(
       `SELECT 
         COUNT(*) AS total_club_members,
         COUNT(CASE WHEN member_type = 'STUDENT' THEN 1 END) AS student_members,
         COUNT(CASE WHEN member_type = 'ALUMNI' THEN 1 END) AS alumni_members,
         COUNT(CASE WHEN member_type = 'ALUMNI' AND status = 'APPROVED' THEN 1 END) AS total_approved_alumni,
+        COUNT(CASE WHEN member_type = 'ALUMNI' AND status = 'APPROVED' AND is_existing = 1 THEN 1 END) AS total_existing_alumni,
+        COUNT(CASE WHEN member_type = 'ALUMNI' AND status = 'APPROVED' AND (is_existing = 0 OR is_existing IS NULL) THEN 1 END) AS total_new_alumni,
         COUNT(CASE WHEN status = 'APPROVED' THEN 1 END) AS total_approved,
         COUNT(CASE WHEN status = 'PENDING' THEN 1 END) AS total_pending,
         COUNT(CASE WHEN status = 'REJECTED' THEN 1 END) AS total_rejected
@@ -343,8 +413,8 @@ async function getCoordinatorDashboard(req, res) {
       [clubId]
     );
 
-    // 3. Action Plan Target (Alumni Target): sum for year if 'ALL' or specific month
-    let planSql = `SELECT SUM(target_members) AS total_target FROM monthly_action_plans WHERE club_id = ?`;
+    // 3. Action Plan Target (Alumni Target & Event Target)
+    let planSql = `SELECT SUM(target_members) AS total_target, SUM(target_events) AS total_events_target FROM monthly_action_plans WHERE club_id = ?`;
     const planParams = [clubId];
     if (!isAllYears) {
       planSql += ` AND year = ?`;
@@ -356,11 +426,14 @@ async function getCoordinatorDashboard(req, res) {
     }
     const [monthlyPlan] = await query(planSql, planParams);
     const targetMembers = Number(monthlyPlan[0]?.total_target) || 0;
+    const targetEventsGoal = Number(monthlyPlan[0]?.total_events_target) || 0;
 
     // Filtered member statistics for the selected period
     let memSql = `
       SELECT 
         COUNT(CASE WHEN member_type = 'ALUMNI' AND status = 'APPROVED' THEN 1 END) AS period_approved_alumni,
+        COUNT(CASE WHEN member_type = 'ALUMNI' AND status = 'APPROVED' AND is_existing = 1 THEN 1 END) AS period_existing_alumni,
+        COUNT(CASE WHEN member_type = 'ALUMNI' AND status = 'APPROVED' AND (is_existing = 0 OR is_existing IS NULL) THEN 1 END) AS period_new_alumni,
         COUNT(CASE WHEN member_type = 'ALUMNI' AND status = 'PENDING' THEN 1 END) AS period_pending_alumni,
         COUNT(CASE WHEN member_type = 'STUDENT' THEN 1 END) AS period_students,
         COUNT(CASE WHEN member_type = 'ALUMNI' THEN 1 END) AS period_alumni,
@@ -374,89 +447,115 @@ async function getCoordinatorDashboard(req, res) {
     const memParams = [clubId];
 
     if (!isAllYears) {
-      memSql += ` AND (strftime('%Y', created_at) = ? OR YEAR(created_at) = ?)`;
-      memParams.push(String(selectedYear), selectedYear);
+      memSql += ` AND YEAR(created_at) = ?`;
+      memParams.push(Number(selectedYear));
     }
 
     if (!isWholeYear) {
-      memSql += ` AND (strftime('%m', created_at) = ? OR MONTH(created_at) = ?)`;
-      memParams.push(formattedMonth, selectedMonth);
+      memSql += ` AND MONTH(created_at) = ?`;
+      memParams.push(Number(selectedMonth));
     }
 
     const [monthMemberStats] = await query(memSql, memParams);
     const periodApprovedAlumni = monthMemberStats[0]?.period_approved_alumni || 0;
     const periodPendingAlumni = monthMemberStats[0]?.period_pending_alumni || 0;
-    const remainingTarget = Math.max(0, targetMembers - periodApprovedAlumni);
+    const allTimeApprovedAlumni = memberStats[0]?.total_approved_alumni || 0;
+    const allTimePendingAlumni = memberStats[0]?.total_pending || 0;
+    const allTimeStudents = memberStats[0]?.student_members || 0;
+    const periodStudents = monthMemberStats[0]?.period_students || 0;
+
+    const portalApprovedAlumni = (isWholeYear && isAllYears) ? allTimeApprovedAlumni : periodApprovedAlumni;
+    const portalExistingAlumni = (isWholeYear && isAllYears)
+      ? (Number(memberStats[0]?.total_existing_alumni) || 0)
+      : (Number(monthMemberStats[0]?.period_existing_alumni) || 0);
+    const portalNewAlumni = (isWholeYear && isAllYears)
+      ? (Number(memberStats[0]?.total_new_alumni) || 0)
+      : (Number(monthMemberStats[0]?.period_new_alumni) || 0);
+
+    const pendingAlumni = (isWholeYear && isAllYears) ? allTimePendingAlumni : periodPendingAlumni;
+    const currentStudents = (isWholeYear && isAllYears) ? allTimeStudents : periodStudents;
+
+    // Actual Alumni combines baseline historical count with portal added old members + new members
+    const totalExistingAlumni = existingAlumni + portalExistingAlumni;
+    const actualAlumni = totalExistingAlumni + portalNewAlumni;
+    const totalMembers = currentStudents + actualAlumni;
+
+    const remainingTarget = Math.max(0, targetMembers - portalNewAlumni);
     const progressPercent = targetMembers > 0 
-      ? Math.min(100, Math.round((periodApprovedAlumni / targetMembers) * 100)) 
-      : (periodApprovedAlumni > 0 ? 100 : 0);
+      ? Math.min(100, Math.round((portalNewAlumni / targetMembers) * 100)) 
+      : (portalNewAlumni > 0 ? 100 : 0);
 
     // 4. Events for selected period
     let evSql = `
       SELECT 
         e.*, 
         r.id AS report_id, 
-        r.file_name AS report_file_name,
+        r.file_name AS report_file_name, 
         r.uploaded_at AS report_uploaded_at,
-        COUNT(res.id) AS reschedule_count
+        COALESCE(res.reschedule_count, 0) AS reschedule_count
       FROM events e
       LEFT JOIN reports r ON r.event_id = e.id
-      LEFT JOIN event_reschedules res ON res.event_id = e.id
+      LEFT JOIN (SELECT event_id, COUNT(*) AS reschedule_count FROM event_reschedules GROUP BY event_id) res ON res.event_id = e.id
       WHERE e.club_id = ?
     `;
     const evParams = [clubId];
 
     if (!isAllYears) {
-      evSql += ` AND (strftime('%Y', e.event_date) = ? OR YEAR(e.event_date) = ?)`;
-      evParams.push(String(selectedYear), selectedYear);
+      evSql += ` AND YEAR(e.event_date) = ?`;
+      evParams.push(Number(selectedYear));
     }
 
     if (!isWholeYear) {
-      evSql += ` AND (strftime('%m', e.event_date) = ? OR MONTH(e.event_date) = ?)`;
-      evParams.push(formattedMonth, selectedMonth);
+      evSql += ` AND MONTH(e.event_date) = ?`;
+      evParams.push(Number(selectedMonth));
     }
 
-    evSql += ` GROUP BY e.id ORDER BY e.event_date ASC, e.event_time ASC`;
+    evSql += ` ORDER BY e.event_date ASC, e.event_time ASC`;
 
     const [events] = await query(evSql, evParams);
 
+    const portalCompletedEvents = events.filter(e => e.status === 'COMPLETED').length;
+    const actualCompletedEvents = existingEventsCompleted + portalCompletedEvents;
+    const plannedEvents = events.filter(e => e.status === 'PLANNED').length;
+    const rescheduledEvents = events.filter(e => e.status === 'RESCHEDULED').length;
+    const targetEvents = targetEventsGoal > 0 ? targetEventsGoal : events.length;
+
     return res.status(200).json({
       success: true,
-      club: clubData[0],
+      club: currentClub,
       month: selectedMonth,
       year: selectedYear,
       isWholeYear,
       isAllYears,
       kpis: {
-        total_members: (isWholeYear && isAllYears)
-          ? (memberStats[0]?.total_club_members || 0)
-          : (monthMemberStats[0]?.period_total || 0),
-        student_members: (isWholeYear && isAllYears)
-          ? (memberStats[0]?.student_members || 0)
-          : (monthMemberStats[0]?.period_students || 0),
-        alumni_members: (isWholeYear && isAllYears)
-          ? (memberStats[0]?.alumni_members || 0)
-          : (monthMemberStats[0]?.period_alumni || 0),
-        approved_alumni: periodApprovedAlumni,
-        approved_members: (isWholeYear && isAllYears)
-          ? (memberStats[0]?.total_approved || 0)
-          : (monthMemberStats[0]?.period_approved || 0),
-        pending_members: (isWholeYear && isAllYears)
-          ? (memberStats[0]?.total_pending || 0)
-          : (monthMemberStats[0]?.period_pending || 0),
-        rejected_members: (isWholeYear && isAllYears)
-          ? (memberStats[0]?.total_rejected || 0)
-          : (monthMemberStats[0]?.period_rejected || 0),
-        all_time_total_members: memberStats[0]?.total_club_members || 0,
-        all_time_student_members: memberStats[0]?.student_members || 0,
-        target_members: targetMembers, // Alumni Target
-        monthly_approved: periodApprovedAlumni, // Approved Alumni in period
-        monthly_pending: periodPendingAlumni,
+        total_members: totalMembers,
+        student_members: currentStudents,
+        existing_alumni: totalExistingAlumni,
+        portal_existing_alumni: portalExistingAlumni,
+        portal_new_alumni: portalNewAlumni,
+        portal_approved_alumni: portalNewAlumni,
+        monthly_approved: portalNewAlumni,
+        actual_alumni: actualAlumni,
+        alumni_members: actualAlumni,
+        approved_alumni: actualAlumni,
+        pending_members: pendingAlumni,
+        pending_alumni: pendingAlumni,
+        monthly_pending: pendingAlumni,
+        approved_members: totalMembers,
+        rejected_members: (isWholeYear && isAllYears) ? (memberStats[0]?.total_rejected || 0) : (monthMemberStats[0]?.period_rejected || 0),
+        all_time_total_members: allTimeStudents + totalExistingAlumni + (Number(memberStats[0]?.total_new_alumni) || 0),
+        all_time_student_members: allTimeStudents,
+        target_members: targetMembers,
         remaining_target: remainingTarget,
         progress_percent: progressPercent,
+        existing_events_completed: existingEventsCompleted,
+        portal_completed_events: portalCompletedEvents,
+        actual_completed_events: actualCompletedEvents,
+        completed_events: actualCompletedEvents,
+        target_events: targetEvents,
         total_events: events.length,
-        completed_events: events.filter(e => e.status === 'COMPLETED').length,
-        rescheduled_events: events.filter(e => e.status === 'RESCHEDULED').length
+        planned_events: plannedEvents,
+        rescheduled_events: rescheduledEvents
       },
       events
     });

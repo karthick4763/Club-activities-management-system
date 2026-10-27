@@ -18,7 +18,11 @@ import {
   Clock, 
   Download, 
   Search,
-  MessageSquare
+  MessageSquare,
+  Target,
+  Database,
+  Award,
+  AlertCircle
 } from 'lucide-react';
 
 const MONTHS = [
@@ -121,9 +125,6 @@ export const AdminDashboard = () => {
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
           Administrator Dashboard
         </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Overview of student clubs, membership recruitment targets, and activity progress
-        </p>
       </div>
 
       {/* Global Combined Filter Bar at the TOP of Dashboard */}
@@ -206,12 +207,12 @@ export const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* Dynamic KPI Cards reflecting selected filters */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      {/* Membership Overview Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <StatCard
           title="Total Members"
           value={kpis.total_members || 0}
-          subtitle={`${kpis.student_members || 0} Students • ${kpis.alumni_members || 0} Alumni`}
+          subtitle={`${kpis.student_members || 0} Students • ${kpis.actual_alumni || 0} Alumni (${kpis.existing_alumni || 0} Baseline + ${kpis.portal_approved_alumni || 0} Portal)`}
           icon={Users}
           color="indigo"
           clickable={true}
@@ -220,43 +221,132 @@ export const AdminDashboard = () => {
         <StatCard
           title="Student Members"
           value={kpis.student_members || 0}
-          subtitle="Auto-approved regular members"
+          subtitle="Auto-approved regular student members"
           icon={UserCheck}
           color="emerald"
           clickable={true}
           onClick={() => navigate('/members?type=students')}
         />
-        <StatCard
-          title="Alumni Target Goal"
-          value={`${kpis.approved_alumni || 0} / ${kpis.target_members || 0}`}
-          subtitle={`${kpis.pending_member_approvals || 0} Pending Alumni approvals`}
-          icon={Building2}
-          color="amber"
-          badge={kpis.pending_member_approvals > 0 ? `${kpis.pending_member_approvals} Pending` : 'All Clear'}
-          clickable={true}
-          onClick={() => navigate('/members?type=alumni&status=pending')}
-        />
-        <StatCard
-          title="Events Conducted"
-          value={`${kpis.completed_events || 0} / ${kpis.total_events || 0}`}
-          subtitle={`${kpis.rescheduled_events || 0} Rescheduled activities`}
-          icon={Calendar}
-          color="purple"
-          clickable={true}
-          onClick={() => navigate('/events-reports?status=all&year=2026&month=ALL')}
-        />
+      </div>
+
+      {/* 1. Alumni Outreach & Recruitment: Dedicated Count Buttons */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#7C3AED]"></span>
+            <h2 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+              Alumni Outreach & Recruitment Breakdown
+            </h2>
+          </div>
+          <span className="text-[11px] text-slate-400 font-medium">Click any count button to view list</span>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="Actual Alumni"
+            value={kpis.actual_alumni || 0}
+            subtitle="Verified alumni network"
+            icon={Building2}
+            color="purple"
+            badge="Verified"
+            clickable={true}
+            onClick={() => navigate('/members?type=alumni')}
+          />
+          <StatCard
+            title="Target Goal"
+            value={kpis.target_members || 0}
+            subtitle="Recruitment target"
+            icon={Target}
+            color="indigo"
+            clickable={true}
+            onClick={() => {
+              const el = document.getElementById('club-target-summary');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+            }}
+          />
+          <StatCard
+            title="New Members"
+            value={kpis.portal_approved_alumni || 0}
+            subtitle="Portal verified additions"
+            icon={CheckCircle2}
+            color="emerald"
+            badge="Verified"
+            clickable={true}
+            onClick={() => navigate('/members?type=alumni&status=approved')}
+          />
+          <StatCard
+            title="Pending Approvals"
+            value={kpis.pending_member_approvals || 0}
+            subtitle="Awaiting admin review"
+            icon={AlertCircle}
+            color="amber"
+            badge={kpis.pending_member_approvals > 0 ? `${kpis.pending_member_approvals} Pending` : 'All Clear'}
+            clickable={true}
+            onClick={() => navigate('/admin/members')}
+          />
+        </div>
+      </div>
+
+      {/* 2. Event Activities & Completion: Dedicated Count Buttons */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#16A34A]"></span>
+            <h2 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+              Event Activities & Completion Breakdown
+            </h2>
+          </div>
+          <span className="text-[11px] text-slate-400 font-medium">Click any count button to filter activities</span>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="Actual Completed"
+            value={kpis.actual_completed_events || 0}
+            subtitle="Total verified events"
+            icon={Award}
+            color="emerald"
+            badge="Conducted"
+            clickable={true}
+            onClick={() => navigate('/events-reports?status=COMPLETED')}
+          />
+          <StatCard
+            title="Target Events"
+            value={kpis.target_events || 0}
+            subtitle="Goal for period"
+            icon={Target}
+            color="indigo"
+            clickable={true}
+            onClick={() => navigate('/events-reports')}
+          />
+          <StatCard
+            title="New Completed"
+            value={kpis.portal_completed_events || 0}
+            subtitle="Conducted this month"
+            icon={Calendar}
+            color="purple"
+            clickable={true}
+            onClick={() => navigate('/events-reports?status=COMPLETED')}
+          />
+          <StatCard
+            title="Planned Events"
+            value={kpis.planned_events || 0}
+            subtitle="Scheduled upcoming"
+            icon={Clock}
+            color="amber"
+            clickable={true}
+            onClick={() => navigate('/events-reports?status=PLANNED')}
+          />
+        </div>
       </div>
 
       {/* Club Target & Activity Summary */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div id="club-target-summary" className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div>
             <h2 className="text-base font-bold text-slate-900">
               Club Target Performance Summary • {currentMonthLabel} {year === 'ALL' ? '' : year}
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Target counts strictly measure <strong>Alumni members</strong> outreach. Student members are auto-enrolled.
-            </p>
           </div>
         </div>
 
@@ -266,12 +356,13 @@ export const AdminDashboard = () => {
               <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-bold uppercase tracking-wider">
                 <th className="py-3 px-6">Club Name</th>
                 <th className="py-3 px-4 text-center">Total Members</th>
-                <th className="py-3 px-4 text-center">Student Count</th>
+                <th className="py-3 px-4 text-center">Students</th>
+                <th className="py-3 px-4 text-center bg-slate-100/70 text-slate-700">Existing Baseline</th>
+                <th className="py-3 px-4 text-center bg-purple-50/40 text-[#7C3AED]">Actual Alumni</th>
                 <th className="py-3 px-4 text-center bg-purple-50/40 text-[#7C3AED]">Alumni Target</th>
-                <th className="py-3 px-4 text-center bg-purple-50/40 text-[#7C3AED]">Approved Alumni</th>
-                <th className="py-3 px-4 text-center">Pending Approvals</th>
-                <th className="py-3 px-6 min-w-[180px]">Alumni Goal Progress</th>
-                <th className="py-3 px-4 text-center">Events Conducted</th>
+                <th className="py-3 px-4 text-center">Pending Review</th>
+                <th className="py-3 px-6 min-w-[160px]">Alumni Progress</th>
+                <th className="py-3 px-4 text-center">Completed Events</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -288,11 +379,16 @@ export const AdminDashboard = () => {
                       {club.student_members || 0}
                     </span>
                   </td>
-                  <td className="py-4 px-4 text-center font-bold text-[#7C3AED] text-sm bg-purple-50/20">
-                    {club.target_members}
+                  <td className="py-4 px-4 text-center font-semibold text-slate-600 bg-slate-50/50">
+                    <div className="text-[11px] font-bold text-slate-700">{club.existing_alumni_count || 0} Alumni</div>
+                    <div className="text-[10px] text-slate-400">{club.existing_events_completed_count || 0} Events</div>
                   </td>
                   <td className="py-4 px-4 text-center font-bold text-[#16A34A] text-sm bg-purple-50/20">
-                    {club.approved_alumni || club.approved_members}
+                    <div>{club.actual_alumni}</div>
+                    <div className="text-[10px] text-slate-400 font-normal">({club.existing_alumni_count || 0}b + {club.portal_approved_alumni || 0}p)</div>
+                  </td>
+                  <td className="py-4 px-4 text-center font-bold text-[#7C3AED] text-sm bg-purple-50/20">
+                    {club.target_members}
                   </td>
                   <td className="py-4 px-4 text-center">
                     {club.pending_members > 0 ? (
@@ -305,13 +401,15 @@ export const AdminDashboard = () => {
                   </td>
                   <td className="py-4 px-6">
                     <ProgressBar
-                      current={club.approved_alumni || club.approved_members}
+                      current={club.portal_approved_alumni}
                       target={club.target_members}
                       size="md"
+                      unit="new members"
                     />
                   </td>
                   <td className="py-4 px-4 text-center font-bold text-slate-700">
-                    <span className="text-[#16A34A]">{club.completed_events}</span> / {club.total_events}
+                    <span className="text-[#16A34A]">{club.actual_completed_events}</span> / {club.target_events || club.total_events}
+                    <div className="text-[10px] text-slate-400 font-normal">({club.existing_events_completed_count || 0}b + {club.portal_completed_events || 0}p)</div>
                   </td>
                 </tr>
               ))}
@@ -327,9 +425,6 @@ export const AdminDashboard = () => {
             <h2 className="text-base font-bold text-slate-900">
               Filtered Events & Activities Overview • {data?.filteredEvents?.length || 0} Events
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Event records for {currentMonthLabel} {year}.
-            </p>
           </div>
         </div>
 

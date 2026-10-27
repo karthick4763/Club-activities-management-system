@@ -11,14 +11,20 @@ async function getClubs(req, res) {
         c.club_name, 
         c.description, 
         c.category, 
+        c.existing_alumni_count,
+        c.existing_events_completed_count,
         c.created_at,
-        u.id AS coordinator_id,
-        u.name AS coordinator_name,
-        u.email AS coordinator_email,
+        MAX(u.id) AS coordinator_id,
+        MAX(u.name) AS coordinator_name,
+        MAX(u.email) AS coordinator_email,
         COUNT(DISTINCT m.id) AS total_members,
+        COUNT(DISTINCT CASE WHEN m.member_type = 'STUDENT' THEN m.id END) AS student_members,
+        COUNT(DISTINCT CASE WHEN m.member_type = 'ALUMNI' AND m.status = 'APPROVED' THEN m.id END) AS approved_alumni,
+        COUNT(DISTINCT CASE WHEN m.member_type = 'ALUMNI' AND m.status = 'PENDING' THEN m.id END) AS pending_alumni,
         COUNT(DISTINCT CASE WHEN m.status = 'APPROVED' THEN m.id END) AS approved_members,
         COUNT(DISTINCT CASE WHEN m.status = 'PENDING' THEN m.id END) AS pending_members,
-        COUNT(DISTINCT e.id) AS total_events
+        COUNT(DISTINCT e.id) AS total_events,
+        COUNT(DISTINCT CASE WHEN e.status = 'COMPLETED' THEN e.id END) AS completed_events
       FROM clubs c
       LEFT JOIN users u ON u.club_id = c.id AND u.role = 'COORDINATOR'
       LEFT JOIN members m ON m.club_id = c.id
@@ -38,7 +44,26 @@ async function getClubs(req, res) {
 
     sql += ` GROUP BY c.id ORDER BY c.club_name ASC`;
 
-    const [clubs] = await query(sql, params);
+    const [rawClubs] = await query(sql, params);
+    const clubs = rawClubs.map(c => {
+      const existingAlumni = Number(c.existing_alumni_count) || 0;
+      const portalApprovedAlumni = Number(c.approved_alumni) || 0;
+      const actualAlumni = existingAlumni + portalApprovedAlumni;
+      const existingEvents = Number(c.existing_events_completed_count) || 0;
+      const portalCompletedEvents = Number(c.completed_events) || 0;
+      const actualCompletedEvents = existingEvents + portalCompletedEvents;
+
+      return {
+        ...c,
+        existing_alumni_count: existingAlumni,
+        portal_approved_alumni: portalApprovedAlumni,
+        actual_alumni: actualAlumni,
+        existing_events_completed_count: existingEvents,
+        portal_completed_events: portalCompletedEvents,
+        actual_completed_events: actualCompletedEvents
+      };
+    });
+
     return res.status(200).json({ success: true, clubs });
   } catch (err) {
     console.error('getClubs error:', err);
@@ -78,6 +103,8 @@ async function createClub(req, res) {
       club_name, 
       description, 
       category, 
+      existing_alumni_count,
+      existing_events_completed_count,
       coordinator_name, 
       coordinator_email, 
       coordinator_password 
@@ -88,10 +115,12 @@ async function createClub(req, res) {
     }
 
     const validCategory = category === 'Non-Technical' ? 'Non-Technical' : 'Technical';
+    const alumniCount = Math.max(0, Number(existing_alumni_count) || 0);
+    const eventsCount = Math.max(0, Number(existing_events_completed_count) || 0);
 
     const [result] = await query(
-      'INSERT INTO clubs (club_name, description, category) VALUES (?, ?, ?)',
-      [club_name.trim(), description || '', validCategory]
+      'INSERT INTO clubs (club_name, description, category, existing_alumni_count, existing_events_completed_count) VALUES (?, ?, ?, ?, ?)',
+      [club_name.trim(), description || '', validCategory, alumniCount, eventsCount]
     );
 
     const newClubId = result.insertId;
@@ -140,11 +169,26 @@ async function createClub(req, res) {
 
 async function updateClub(req, res) {
   try {
-    const clubId = req.params.id;
+    const clubId = Number(req.params.id);
+    if (!clubId) {
+      return res.status(400).json({ success: false, message: 'Valid Club ID is required.' });
+    }
+
+    // Role check: Only ADMIN or the assigned COORDINATOR can update
+    if (req.user.role === 'MEMBER') {
+      return res.status(403).json({ success: false, message: 'Forbidden: Members have read-only permissions.' });
+    }
+
+    if (req.user.role === 'COORDINATOR' && Number(req.user.club_id) !== clubId) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You can only update your assigned club.' });
+    }
+
     const { 
       club_name, 
       description, 
       category, 
+      existing_alumni_count,
+      existing_events_completed_count,
       coordinator_name, 
       coordinator_email, 
       coordinator_password 
@@ -155,22 +199,44 @@ async function updateClub(req, res) {
       return res.status(404).json({ success: false, message: 'Club not found.' });
     }
 
-    const validCategory = category === 'Non-Technical' ? 'Non-Technical' : 'Technical';
+    // Check for duplicate club name if name is being changed
+    const targetName = club_name ? club_name.trim() : clubs[0].club_name;
+    if (targetName.toLowerCase() !== clubs[0].club_name.toLowerCase()) {
+      const [duplicate] = await query(
+        'SELECT id FROM clubs WHERE LOWER(club_name) = ? AND id != ?',
+        [targetName.toLowerCase(), clubId]
+      );
+      if (duplicate && duplicate.length > 0) {
+        return res.status(400).json({ success: false, message: 'A club with this name already exists. Please choose a different name.' });
+      }
+    }
+
+    const validCategory = category === 'Non-Technical' ? 'Non-Technical' : (category === 'Technical' ? 'Technical' : clubs[0].category);
+    const alumniCount = existing_alumni_count !== undefined 
+      ? Math.max(0, Number(existing_alumni_count) || 0) 
+      : (clubs[0].existing_alumni_count || 0);
+    const eventsCount = existing_events_completed_count !== undefined 
+      ? Math.max(0, Number(existing_events_completed_count) || 0) 
+      : (clubs[0].existing_events_completed_count || 0);
+
+    const targetDesc = description !== undefined ? description : clubs[0].description;
 
     await query(
-      `UPDATE clubs SET club_name = ?, description = ?, category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      `UPDATE clubs SET club_name = ?, description = ?, category = ?, existing_alumni_count = ?, existing_events_completed_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
       [
-        club_name ? club_name.trim() : clubs[0].club_name,
-        description !== undefined ? description : clubs[0].description,
+        targetName,
+        targetDesc,
         validCategory,
+        alumniCount,
+        eventsCount,
         clubId
       ]
     );
 
-    // Handle Coordinator Assignment/Update
-    if (coordinator_email && coordinator_email.trim()) {
+    // Only administrators can reassign coordinator account or change coordinator credentials
+    if (req.user.role === 'ADMIN' && coordinator_email && coordinator_email.trim()) {
       const email = coordinator_email.trim().toLowerCase();
-      const coordName = (coordinator_name && coordinator_name.trim()) || `${club_name || clubs[0].club_name} Coordinator`;
+      const coordName = (coordinator_name && coordinator_name.trim()) || `${targetName} Coordinator`;
 
       const [existingUsers] = await query('SELECT id, role FROM users WHERE email = ?', [email]);
       if (existingUsers && existingUsers.length > 0) {
@@ -198,7 +264,13 @@ async function updateClub(req, res) {
 
     return res.status(200).json({
       success: true,
-      message: 'Club details and coordinator updated successfully.'
+      message: 'Club details updated successfully.',
+      club: {
+        id: clubId,
+        club_name: targetName,
+        description: targetDesc,
+        category: validCategory
+      }
     });
   } catch (err) {
     console.error('updateClub error:', err);
@@ -206,10 +278,52 @@ async function updateClub(req, res) {
   }
 }
 
+async function updateClubBaseline(req, res) {
+  try {
+    const clubId = Number(req.params.id);
+    if (!clubId) {
+      return res.status(400).json({ success: false, message: 'Valid Club ID is required.' });
+    }
+
+    if (req.user.role === 'COORDINATOR' && Number(req.user.club_id) !== clubId) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You can only update baseline for your assigned club.' });
+    }
+    if (req.user.role === 'MEMBER') {
+      return res.status(403).json({ success: false, message: 'Forbidden: Members have read-only permissions.' });
+    }
+
+    const { existing_alumni_count, existing_events_completed_count } = req.body;
+    const alumniCount = Math.max(0, Number(existing_alumni_count) || 0);
+    const eventsCount = Math.max(0, Number(existing_events_completed_count) || 0);
+
+    const [clubCheck] = await query('SELECT id, club_name FROM clubs WHERE id = ?', [clubId]);
+    if (!clubCheck || clubCheck.length === 0) {
+      return res.status(404).json({ success: false, message: 'Club not found.' });
+    }
+
+    await query(
+      'UPDATE clubs SET existing_alumni_count = ?, existing_events_completed_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [alumniCount, eventsCount, clubId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Club baseline numbers updated successfully.',
+      club_id: clubId,
+      existing_alumni_count: alumniCount,
+      existing_events_completed_count: eventsCount
+    });
+  } catch (err) {
+    console.error('updateClubBaseline error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update club baseline: ' + err.message });
+  }
+}
+
 module.exports = {
   getClubs,
   getClubById,
   createClub,
-  updateClub
+  updateClub,
+  updateClubBaseline
 };
 

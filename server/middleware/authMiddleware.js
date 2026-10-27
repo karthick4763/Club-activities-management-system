@@ -45,8 +45,8 @@ function requireAdmin(req, res, next) {
 }
 
 function requireCoordinator(req, res, next) {
-  if (!req.user || req.user.role !== 'COORDINATOR') {
-    return res.status(403).json({ success: false, message: 'Unauthorized. Coordinator privileges required.' });
+  if (!req.user || (req.user.role !== 'COORDINATOR' && req.user.role !== 'ADMIN')) {
+    return res.status(403).json({ success: false, message: 'Unauthorized. Coordinator or Admin privileges required.' });
   }
   next();
 }

@@ -142,14 +142,13 @@ async function getAllReports(req, res) {
     }
 
     if (year && year !== 'ALL') {
-      sql += ` AND (strftime('%Y', e.event_date) = ? OR YEAR(e.event_date) = ?)`;
-      params.push(String(year), Number(year));
+      sql += ` AND YEAR(e.event_date) = ?`;
+      params.push(Number(year));
     }
 
     if (month && month !== 'ALL') {
-      const formattedMonth = String(month).padStart(2, '0');
-      sql += ` AND (strftime('%m', e.event_date) = ? OR MONTH(e.event_date) = ?)`;
-      params.push(formattedMonth, Number(month));
+      sql += ` AND MONTH(e.event_date) = ?`;
+      params.push(Number(month));
     }
 
     sql += ` ORDER BY r.uploaded_at DESC`;

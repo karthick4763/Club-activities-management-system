@@ -242,81 +242,77 @@ export const MemberApprovals = () => {
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
           Club Members & Directory
         </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Review and authorize newly submitted Alumni outreach connections, student rosters, and club memberships.
-        </p>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white p-5 rounded-2xl border border-[#CBD5E1] shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-        <form onSubmit={handleSearchSubmit} className="relative w-full md:w-80">
+      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-[#CBD5E1] shadow-sm flex flex-col xl:flex-row items-stretch xl:items-center gap-3">
+        {/* 1. Search Bar */}
+        <form onSubmit={handleSearchSubmit} className="relative flex-1 min-w-[200px]">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search member name, email, batch..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-white border border-[#CBD5E1] rounded-xl text-xs font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 focus:border-[#7C3AED]"
+            className="w-full pl-10 pr-4 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-medium text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 focus:border-[#7C3AED]"
           />
         </form>
 
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          {/* Member Type Switcher */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl">
-            {[
-              { id: 'ALUMNI', label: 'Alumni', icon: Briefcase },
-              { id: 'STUDENT', label: 'Students', icon: GraduationCap },
-              { id: 'ALL', label: 'All Records', icon: UserCheck }
-            ].map((t) => {
-              const Icon = t.icon;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => updateFilters(t.id, undefined, undefined)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    typeFilter === t.id
-                      ? 'bg-[#7C3AED] text-white shadow-sm'
-                      : 'text-slate-600 hover:text-[#7C3AED]'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{t.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Club Filter */}
-          <select
-            value={selectedClub}
-            onChange={(e) => updateFilters(undefined, undefined, e.target.value)}
-            className="px-3 py-2 bg-white border border-[#CBD5E1] rounded-xl text-xs font-semibold text-[#0F172A] focus:ring-2 focus:ring-[#7C3AED]/20 focus:border-[#7C3AED]"
-          >
-            <option value="ALL">All Clubs</option>
-            {clubs.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.club_name}
-              </option>
-            ))}
-          </select>
-
-          {/* Status Tabs */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl">
-            {['PENDING', 'APPROVED', 'REJECTED', 'ALL'].map((s) => (
+        {/* 2. Member Type Switcher (Alu / Mem) */}
+        <div className="flex items-center bg-slate-100 p-1 rounded-xl shrink-0 self-start xl:self-auto overflow-x-auto">
+          {[
+            { id: 'ALUMNI', label: 'Alumni', icon: Briefcase },
+            { id: 'STUDENT', label: 'Students', icon: GraduationCap },
+            { id: 'ALL', label: 'All Records', icon: UserCheck }
+          ].map((t) => {
+            const Icon = t.icon;
+            return (
               <button
-                key={s}
-                onClick={() => updateFilters(undefined, s, undefined)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  statusFilter === s
+                key={t.id}
+                onClick={() => updateFilters(t.id, undefined, undefined)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  typeFilter === t.id
                     ? 'bg-[#7C3AED] text-white shadow-sm'
                     : 'text-slate-600 hover:text-[#7C3AED]'
                 }`}
               >
-                {s === 'ALL' ? 'All Status' : s}
+                <Icon className="w-3.5 h-3.5" />
+                <span>{t.label}</span>
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
+
+        {/* 3. Status Tabs */}
+        <div className="flex items-center bg-slate-100 p-1 rounded-xl shrink-0 self-start xl:self-auto overflow-x-auto">
+          {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map((s) => (
+            <button
+              key={s}
+              onClick={() => updateFilters(undefined, s, undefined)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                statusFilter === s
+                  ? 'bg-[#7C3AED] text-white shadow-sm'
+                  : 'text-slate-600 hover:text-[#7C3AED]'
+              }`}
+            >
+              {s === 'ALL' ? 'All Status' : s}
+            </button>
+          ))}
+        </div>
+
+        {/* 4. Club Filter Dropdown */}
+        <select
+          value={selectedClub}
+          onChange={(e) => updateFilters(undefined, undefined, e.target.value)}
+          className="px-3 py-2 bg-white border border-[#CBD5E1] rounded-xl text-xs font-semibold text-[#0F172A] focus:ring-2 focus:ring-[#7C3AED]/20 focus:border-[#7C3AED] shrink-0"
+        >
+          <option value="ALL">All Clubs</option>
+          {clubs.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.club_name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Members Table */}
@@ -325,9 +321,6 @@ export const MemberApprovals = () => {
           <h2 className="text-sm font-bold text-slate-900">
             Showing {members.length} Member Application{members.length !== 1 ? 's' : ''}
           </h2>
-          <span className="text-xs text-slate-500">
-            Approve or reject alumni applications, and assign coordinator roles to student members
-          </span>
         </div>
 
         {members.length === 0 ? (

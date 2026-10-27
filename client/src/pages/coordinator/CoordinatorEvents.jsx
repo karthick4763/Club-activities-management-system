@@ -41,7 +41,10 @@ export const CoordinatorEvents = () => {
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState('ALL');
   const [year, setYear] = useState(2026);
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const s = new URLSearchParams(window.location.search).get('status');
+    return s ? s.toUpperCase() : 'ALL';
+  });
   const [search, setSearch] = useState('');
 
   // Remarks Popup State
@@ -281,9 +284,6 @@ export const CoordinatorEvents = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Club Events and Activities
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Activities, remarks, completion status, and reports for <strong>{user?.club_name}</strong>
-          </p>
         </div>
 
         {!isMember && (
@@ -300,9 +300,8 @@ export const CoordinatorEvents = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white p-5 rounded-2xl border border-[#CBD5E1] shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="relative w-full md:w-80">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#CBD5E1] shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="relative w-full md:w-80">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -352,18 +351,14 @@ export const CoordinatorEvents = () => {
             </select>
           </div>
         </div>
-      </div>
 
       {/* Events List */}
       <div className="bg-white rounded-3xl border border-[#CBD5E1] shadow-sm overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div>
             <h2 className="text-base font-bold text-slate-900">
               Scheduled Club Activities • {filteredEvents.length}
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Overview of club activities, schedule, and uploaded documentation.
-            </p>
           </div>
         </div>
 

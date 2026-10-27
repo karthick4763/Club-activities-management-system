@@ -3,7 +3,7 @@ const { query } = require('../config/db');
 
 async function getMembers(req, res) {
   try {
-    const { club_id, status, member_type, month, year, search } = req.query;
+    const { club_id, status, member_type, month, year, search, enrollment } = req.query;
 
     let sql = `
       SELECT 
@@ -24,6 +24,7 @@ async function getMembers(req, res) {
         m.position,
         m.status,
         m.role, 
+        m.is_existing,
         m.admin_remarks, 
         m.created_at, 
         m.approved_at,
@@ -50,20 +51,27 @@ async function getMembers(req, res) {
       params.push(member_type);
     }
 
+    if (enrollment && enrollment !== 'ALL') {
+      if (enrollment.toUpperCase() === 'EXISTING' || enrollment.toLowerCase() === 'existing') {
+        sql += ` AND m.is_existing = 1`;
+      } else if (enrollment.toUpperCase() === 'NEW' || enrollment.toLowerCase() === 'new') {
+        sql += ` AND (m.is_existing = 0 OR m.is_existing IS NULL)`;
+      }
+    }
+
     if (status && status !== 'ALL') {
       sql += ` AND m.status = ?`;
       params.push(status);
     }
 
     if (year && year !== 'ALL') {
-      sql += ` AND (strftime('%Y', m.created_at) = ? OR YEAR(m.created_at) = ?)`;
-      params.push(String(year), Number(year));
+      sql += ` AND YEAR(m.created_at) = ?`;
+      params.push(Number(year));
     }
 
     if (month && month !== 'ALL') {
-      const formattedMonth = String(month).padStart(2, '0');
-      sql += ` AND (strftime('%m', m.created_at) = ? OR MONTH(m.created_at) = ?)`;
-      params.push(formattedMonth, Number(month));
+      sql += ` AND MONTH(m.created_at) = ?`;
+      params.push(Number(month));
     }
 
     if (search && search.trim()) {
@@ -98,10 +106,12 @@ async function addMember(req, res) {
       company,
       domain,
       position,
-      club_id 
+      club_id,
+      is_existing
     } = req.body;
 
     const normalizedType = member_type.toUpperCase() === 'ALUMNI' ? 'ALUMNI' : 'STUDENT';
+    const isOldMember = is_existing === 1 || is_existing === true || is_existing === 'true' || is_existing === '1';
 
     if (normalizedType === 'STUDENT') {
       if (!name || !email || !phone || !department || !year) {
@@ -218,12 +228,12 @@ async function addMember(req, res) {
       }
     }
 
-    // Students are Auto-Approved; Alumni require Admin Approval (PENDING)
-    const initialStatus = normalizedType === 'STUDENT' ? 'APPROVED' : 'PENDING';
+    // Students are Auto-Approved; Alumni require Admin Approval (PENDING) UNLESS adding an Old / Already Existing Member
+    const initialStatus = isOldMember ? 'APPROVED' : (normalizedType === 'STUDENT' ? 'APPROVED' : 'PENDING');
 
     const [result] = await query(
-      `INSERT INTO members (club_id, member_type, name, gender, dob, email, phone, department, year, batch, company, domain, position, status, role, submitted_by, approved_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO members (club_id, member_type, name, gender, dob, email, phone, department, year, batch, company, domain, position, status, role, is_existing, submitted_by, approved_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         targetClubId,
         normalizedType,
@@ -240,6 +250,7 @@ async function addMember(req, res) {
         position ? position.trim() : null,
         initialStatus,
         'MEMBER',
+        isOldMember ? 1 : 0,
         req.user.id,
         initialStatus === 'APPROVED' ? new Date() : null
       ]
@@ -254,9 +265,11 @@ async function addMember(req, res) {
       );
     }
 
-    const successMessage = normalizedType === 'STUDENT'
-      ? 'Student member registered and auto-approved successfully.'
-      : 'Alumni member registered successfully. Awaiting Admin verification & approval.';
+    const successMessage = isOldMember
+      ? `Old / Already existing ${normalizedType === 'STUDENT' ? 'student' : 'alumni'} member added and recorded successfully.`
+      : (normalizedType === 'STUDENT'
+        ? 'Student member registered and auto-approved successfully.'
+        : 'Alumni member registered successfully. Awaiting Admin verification & approval.');
 
     return res.status(201).json({
       success: true,
@@ -264,6 +277,7 @@ async function addMember(req, res) {
       memberId: result.insertId,
       status: initialStatus,
       member_type: normalizedType,
+      is_existing: isOldMember ? 1 : 0,
       role: 'MEMBER'
     });
   } catch (err) {
@@ -278,7 +292,7 @@ async function bulkAddMembers(req, res) {
       return res.status(403).json({ success: false, message: 'Forbidden. Members have read-only access.' });
     }
 
-    const { members = [], club_id } = req.body;
+    const { members = [], club_id, is_existing: batchIsExisting } = req.body;
 
     if (!Array.isArray(members) || members.length === 0) {
       return res.status(400).json({ success: false, message: 'No member records provided in request payload.' });
@@ -429,13 +443,25 @@ async function bulkAddMembers(req, res) {
         position = (row.position || row.Position || row.designation || row.Designation || row.role_title || null)?.toString().trim() || null;
       }
 
-      const initialStatus = normalizedType === 'STUDENT' ? 'APPROVED' : 'PENDING';
+      const isRowExisting = Boolean(
+        batchIsExisting || 
+        row.is_existing || 
+        row['Is Existing'] === 'Yes' || 
+        row['Is Existing'] === true || 
+        row['Is Existing'] === 1 || 
+        String(row['Member Category'] || '').toLowerCase().includes('existing') || 
+        String(row['Member Category'] || '').toLowerCase().includes('old') ||
+        String(row['Enrollment Type'] || '').toLowerCase().includes('existing') ||
+        String(row['Enrollment Type'] || '').toLowerCase().includes('old')
+      );
+
+      const initialStatus = isRowExisting ? 'APPROVED' : (normalizedType === 'STUDENT' ? 'APPROVED' : 'PENDING');
       const approvedAt = initialStatus === 'APPROVED' ? new Date() : null;
 
       try {
         const [insertRes] = await query(
-          `INSERT INTO members (club_id, member_type, name, gender, dob, email, phone, department, year, batch, company, domain, position, status, role, submitted_by, approved_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO members (club_id, member_type, name, gender, dob, email, phone, department, year, batch, company, domain, position, status, role, is_existing, submitted_by, approved_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             targetClubId,
             normalizedType,
@@ -452,6 +478,7 @@ async function bulkAddMembers(req, res) {
             position,
             initialStatus,
             'MEMBER',
+            isRowExisting ? 1 : 0,
             req.user.id,
             approvedAt
           ]

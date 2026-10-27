@@ -53,9 +53,19 @@ copyRecursive(
   ['node_modules', '.git']
 );
 
-// 3. Copy README
-if (fs.existsSync(path.join(rootDir, 'README.md'))) {
-  fs.copyFileSync(path.join(rootDir, 'README.md'), path.join(tempDir, 'README.md'));
+// 3. Ensure server directories exist
+fs.mkdirSync(path.join(tempDir, 'server', 'data'), { recursive: true });
+fs.writeFileSync(path.join(tempDir, 'server', 'data', '.gitkeep'), '# Keep data dir\n');
+fs.mkdirSync(path.join(tempDir, 'server', 'uploads'), { recursive: true });
+fs.writeFileSync(path.join(tempDir, 'server', 'uploads', '.gitkeep'), '# Keep uploads dir\n');
+
+// 4. Copy Root Files (README, run.bat, install.bat, .gitignore)
+const rootFiles = ['README.md', 'run.bat', 'install.bat', '.gitignore'];
+for (const file of rootFiles) {
+  const src = path.join(rootDir, file);
+  if (fs.existsSync(src)) {
+    fs.copyFileSync(src, path.join(tempDir, file));
+  }
 }
 
 console.log('Compressing files into zip archive...');

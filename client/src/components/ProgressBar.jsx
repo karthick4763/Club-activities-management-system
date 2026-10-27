@@ -1,6 +1,6 @@
 import React from 'react';
 
-export const ProgressBar = ({ current = 0, target = 0, size = 'md', showLabel = true }) => {
+export const ProgressBar = ({ current = 0, target = 0, size = 'md', showLabel = true, unit = 'new members' }) => {
   const percent = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : (current > 0 ? 100 : 0);
 
   // Dynamic progress bar color
@@ -26,7 +26,7 @@ export const ProgressBar = ({ current = 0, target = 0, size = 'md', showLabel = 
       {showLabel && (
         <div className="flex justify-between items-center mb-1.5 text-xs">
           <span className="font-semibold text-slate-700">
-            {current} <span className="text-slate-400 font-normal">/ {target} new members</span>
+            {current} <span className="text-slate-400 font-normal">/ {target}{unit ? ` ${unit}` : ''}</span>
           </span>
           <span className={`font-bold ${percent >= 100 ? 'text-emerald-600' : 'text-slate-700'}`}>
             {percent}%

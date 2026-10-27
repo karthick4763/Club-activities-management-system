@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Layers, Lock, Mail, Shield, User, ArrowRight, AlertCircle, Code, Cpu, BookOpen, Film, Eye, EyeOff, Briefcase } from 'lucide-react';
+import { Layers, Lock, Mail, Shield, User, ArrowRight, AlertCircle, Code, Cpu, Eye, EyeOff, Briefcase } from 'lucide-react';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
@@ -14,12 +14,13 @@ export const Login = () => {
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
       const user = await login(email, password);
+
       if (user.role === 'ADMIN') {
         navigate('/admin/dashboard');
       } else if (user.role === 'MEMBER') {

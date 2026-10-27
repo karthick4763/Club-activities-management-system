@@ -86,9 +86,6 @@ export const CoordinatorReports = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Event Reports & Documentation
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Uploaded reports, documentation, and proofs for <strong>{user?.club_name}</strong>
-          </p>
         </div>
       </div>
 

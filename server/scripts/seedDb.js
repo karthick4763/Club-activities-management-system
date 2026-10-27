@@ -1,39 +1,65 @@
 const bcrypt = require('bcryptjs');
-const { query } = require('../config/db');
+const { query, getDbType } = require('../config/db');
 const initDb = require('./initDb');
 
 async function seedDb() {
   console.log('--- Starting Database Seeding ---');
 
-  // Drop existing tables in reverse dependency order for clean state
+  const isMysql = getDbType() === 'mysql';
+
+  // Disable foreign key checks for clean drop in MySQL/TiDB
   try {
-    await query('DROP TABLE IF EXISTS reports');
-    await query('DROP TABLE IF EXISTS event_reschedules');
-    await query('DROP TABLE IF EXISTS events');
-    await query('DROP TABLE IF EXISTS monthly_action_plans');
-    await query('DROP TABLE IF EXISTS members');
-    await query('DROP TABLE IF EXISTS users');
-    await query('DROP TABLE IF EXISTS clubs');
+    if (isMysql) {
+      await query('SET FOREIGN_KEY_CHECKS = 0');
+    }
   } catch (e) {
-    console.log('Notice during table cleanup:', e.message);
+    // ignore
+  }
+
+  // Drop existing tables including any legacy tasks table
+  const tablesToDrop = [
+    'reports',
+    'event_reschedules',
+    'tasks',
+    'events',
+    'monthly_action_plans',
+    'members',
+    'users',
+    'clubs'
+  ];
+
+  for (const table of tablesToDrop) {
+    try {
+      await query(`DROP TABLE IF EXISTS \`${table}\``);
+    } catch (e) {
+      console.log(`Notice during table cleanup (${table}):`, e.message);
+    }
+  }
+
+  try {
+    if (isMysql) {
+      await query('SET FOREIGN_KEY_CHECKS = 1');
+    }
+  } catch (e) {
+    // ignore
   }
 
   await initDb();
 
   // 1. Seed the 5 Target Clubs (AI, IT, Electronics, Auto, Entrepreneurship)
   const clubs = [
-    { name: 'AI Club', desc: 'Artificial intelligence, machine learning, data intelligence, deep neural networks, and computer vision.', cat: 'Technical' },
-    { name: 'IT Club', desc: 'Full-stack software engineering, cloud systems, web platforms, cybersecurity, and DevOps architectures.', cat: 'Technical' },
-    { name: 'Electronics Club', desc: 'Embedded systems, microcontrollers, Internet of Things (IoT), circuit design, robotics, and sensors.', cat: 'Technical' },
-    { name: 'Auto Club', desc: 'Automotive innovation, electric vehicles, CAD modeling, autonomous mobility, and mechanical systems.', cat: 'Technical' },
-    { name: 'Entrepreneurship Club', desc: 'Startup incubation, venture capital, business modeling, pitching, and student enterprise.', cat: 'Non-Technical' }
+    { name: 'AI Club', desc: 'Artificial intelligence, machine learning, data intelligence, deep neural networks, and computer vision.', cat: 'Technical', existingAlumni: 12, existingEvents: 4 },
+    { name: 'IT Club', desc: 'Full-stack software engineering, cloud systems, web platforms, cybersecurity, and DevOps architectures.', cat: 'Technical', existingAlumni: 18, existingEvents: 6 },
+    { name: 'Electronics Club', desc: 'Embedded systems, microcontrollers, Internet of Things (IoT), circuit design, robotics, and sensors.', cat: 'Technical', existingAlumni: 10, existingEvents: 3 },
+    { name: 'Auto Club', desc: 'Automotive innovation, electric vehicles, CAD modeling, autonomous mobility, and mechanical systems.', cat: 'Technical', existingAlumni: 8, existingEvents: 2 },
+    { name: 'Entrepreneurship Club', desc: 'Startup incubation, venture capital, business modeling, pitching, and student enterprise.', cat: 'Non-Technical', existingAlumni: 15, existingEvents: 5 }
   ];
 
   const clubIds = {};
   for (const c of clubs) {
     const [res] = await query(
-      'INSERT INTO clubs (club_name, description, category) VALUES (?, ?, ?)',
-      [c.name, c.desc, c.cat]
+      'INSERT INTO clubs (club_name, description, category, existing_alumni_count, existing_events_completed_count) VALUES (?, ?, ?, ?, ?)',
+      [c.name, c.desc, c.cat, c.existingAlumni || 0, c.existingEvents || 0]
     );
     clubIds[c.name] = res.insertId;
   }
@@ -75,21 +101,21 @@ async function seedDb() {
 
   const planIds = {};
   const plans = [
-    { clubId: clubIds['AI Club'], target: 5 },
-    { clubId: clubIds['IT Club'], target: 8 },
-    { clubId: clubIds['Electronics Club'], target: 6 },
-    { clubId: clubIds['Auto Club'], target: 4 },
-    { clubId: clubIds['Entrepreneurship Club'], target: 5 }
+    { clubId: clubIds['AI Club'], target: 5, targetEvents: 2 },
+    { clubId: clubIds['IT Club'], target: 8, targetEvents: 3 },
+    { clubId: clubIds['Electronics Club'], target: 6, targetEvents: 2 },
+    { clubId: clubIds['Auto Club'], target: 4, targetEvents: 2 },
+    { clubId: clubIds['Entrepreneurship Club'], target: 5, targetEvents: 2 }
   ];
 
   for (const p of plans) {
     const [pRes] = await query(
-      'INSERT INTO monthly_action_plans (club_id, month, year, target_members) VALUES (?, ?, ?, ?)',
-      [p.clubId, currentMonth, currentYear, p.target]
+      'INSERT INTO monthly_action_plans (club_id, month, year, target_members, target_events) VALUES (?, ?, ?, ?, ?)',
+      [p.clubId, currentMonth, currentYear, p.target, p.targetEvents]
     );
     planIds[p.clubId] = pRes.insertId;
   }
-  console.log('✓ Monthly Action Plans seeded for September 2026 (Alumni Targets)');
+  console.log('✓ Monthly Action Plans seeded for September 2026 (Alumni & Event Targets)');
 
   // 4. Seed Members (Student Members: Auto-Approved; Alumni Members: Verified/Approved or Pending)
   const members = [
