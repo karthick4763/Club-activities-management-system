@@ -45,6 +45,34 @@ export const AuthProvider = ({ children }) => {
     throw new Error(res.data.message || 'Login failed');
   };
 
+  const ssoLogin = async (email, ssoToken) => {
+    if (ssoToken) {
+      localStorage.setItem('token', ssoToken);
+      setToken(ssoToken);
+      try {
+        const res = await axiosClient.get('/auth/me');
+        if (res.data && res.data.user) {
+          setUser(res.data.user);
+          localStorage.setItem('user', JSON.stringify(res.data.user));
+          return res.data.user;
+        }
+      } catch (err) {
+        console.warn('Direct token verification failed, trying sso-login endpoint:', err);
+      }
+    }
+
+    const res = await axiosClient.post('/auth/sso-login', { email });
+    if (res.data.success) {
+      const { token: newToken, user: newUser } = res.data;
+      localStorage.setItem('token', newToken);
+      localStorage.setItem('user', JSON.stringify(newUser));
+      setToken(newToken);
+      setUser(newUser);
+      return newUser;
+    }
+    throw new Error(res.data.message || 'Single Sign-On login failed');
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -71,6 +99,7 @@ export const AuthProvider = ({ children }) => {
         token,
         loading,
         login,
+        ssoLogin,
         logout,
         updateUser,
         isAdmin,

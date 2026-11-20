@@ -33,6 +33,13 @@ const eventRoutes = require('./routes/eventRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 
+// SSO Routes & Handlers (NEC Alumni Single Sign-On via Vaave SDK)
+const clubSSORoutes = require('./single-sign-on/routes/club');
+const placementSSORoutes = require('./single-sign-on/routes/placement');
+const webinarSSORoutes = require('./single-sign-on/routes/webinar');
+const mentorshipSSORoutes = require('./single-sign-on/routes/mentorShip');
+const { handleClubSSO, handleUserByEmail } = require('./single-sign-on/controllers/club.controller');
+
 const PORT = process.env.PORT || 5005;
 const clientDistPath = path.join(__dirname, '..', 'client', 'dist');
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -58,6 +65,17 @@ appRouter.use('/api/action-plans', actionPlanRoutes);
 appRouter.use('/api/events', eventRoutes);
 appRouter.use('/api/reports', reportRoutes);
 appRouter.use('/api/dashboard', dashboardRoutes);
+
+// Mount SSO Routes
+appRouter.use('/club', clubSSORoutes);
+appRouter.use('/placement', placementSSORoutes);
+appRouter.use('/webinar', webinarSSORoutes);
+appRouter.use('/mentorship', mentorshipSSORoutes);
+
+// Direct SSO endpoints
+appRouter.get('/sso', handleClubSSO);
+appRouter.get('/election/sso', handleClubSSO);
+appRouter.get('/api/user-by-email', handleUserByEmail);
 
 
 // MIME type dictionary
@@ -324,7 +342,7 @@ async function handleRequest(req, res) {
       return;
     }
 
-    // 6. Serve Frontend Static Build & SPA Routing Fallback
+   
     if (fs.existsSync(clientDistPath)) {
       const requestedFile = path.join(clientDistPath, req.pathname === '/' ? 'index.html' : req.pathname);
       if (fs.existsSync(requestedFile) && fs.statSync(requestedFile).isFile()) {
@@ -332,7 +350,7 @@ async function handleRequest(req, res) {
         return;
       }
 
-      // If client-side route (not /api/...), serve index.html for React Router
+    
       if (!req.pathname.startsWith('/api/')) {
         const indexPath = path.join(clientDistPath, 'index.html');
         if (fs.existsSync(indexPath)) {

@@ -140,9 +140,100 @@ async function changePassword(req, res) {
   }
 }
 
+async function ssoLogin(req, res) {
+  try {
+    const { email } = req.body || {};
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required for SSO.' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    let [users] = await query(
+      `SELECT u.id, u.name, u.email, u.role, u.club_id, c.club_name 
+       FROM users u 
+       LEFT JOIN clubs c ON u.club_id = c.id 
+       WHERE u.email = ?`,
+      [normalizedEmail]
+    );
+
+    let user = users && users.length > 0 ? users[0] : null;
+
+    if (!user) {
+      const [members] = await query(
+        `SELECT id, name, email, club_id, member_type, status FROM members WHERE email = ?`,
+        [normalizedEmail]
+      );
+
+      const randomPassword = await bcrypt.hash(Math.random().toString(36).slice(-8), 10);
+      let userName = normalizedEmail.split('@')[0];
+      let clubId = null;
+
+      if (members && members.length > 0) {
+        userName = members[0].name || userName;
+        clubId = members[0].club_id || null;
+      } else {
+        await query(
+          `INSERT INTO members (club_id, member_type, name, email, status, role) 
+           VALUES (?, 'ALUMNI', ?, ?, 'APPROVED', 'MEMBER')`,
+          [null, userName, normalizedEmail]
+        );
+      }
+
+      let role = 'MEMBER';
+      if (normalizedEmail === 'admin@club.edu' || normalizedEmail === 'vsnithyasaminathan143@gmail.com') {
+        role = 'ADMIN';
+      }
+
+      const [newRes] = await query(
+        `INSERT INTO users (name, email, password, role, club_id) VALUES (?, ?, ?, ?, ?)`,
+        [userName, normalizedEmail, randomPassword, role, clubId]
+      );
+
+      user = {
+        id: newRes.insertId,
+        name: userName,
+        email: normalizedEmail,
+        role: role,
+        club_id: clubId,
+        club_name: null
+      };
+    }
+
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        club_id: user.club_id
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'SSO login successful',
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        club_id: user.club_id,
+        club_name: user.club_name
+      }
+    });
+  } catch (err) {
+    console.error('SSO login error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error during SSO login.' });
+  }
+}
+
 module.exports = {
   login,
   getMe,
-  changePassword
+  changePassword,
+  ssoLogin
 };
 

@@ -221,7 +221,6 @@ export const AdminDashboard = () => {
         <StatCard
           title="Student Members"
           value={kpis.student_members || 0}
-          subtitle="Auto-approved regular student members"
           icon={UserCheck}
           color="emerald"
           clickable={true}
@@ -238,14 +237,12 @@ export const AdminDashboard = () => {
               Alumni Outreach & Recruitment Breakdown
             </h2>
           </div>
-          <span className="text-[11px] text-slate-400 font-medium">Click any count button to view list</span>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             title="Actual Alumni"
             value={kpis.actual_alumni || 0}
-            subtitle="Verified alumni network"
             icon={Building2}
             color="purple"
             badge="Verified"
@@ -255,7 +252,6 @@ export const AdminDashboard = () => {
           <StatCard
             title="Target Goal"
             value={kpis.target_members || 0}
-            subtitle="Recruitment target"
             icon={Target}
             color="indigo"
             clickable={true}
@@ -267,7 +263,6 @@ export const AdminDashboard = () => {
           <StatCard
             title="New Members"
             value={kpis.portal_approved_alumni || 0}
-            subtitle="Portal verified additions"
             icon={CheckCircle2}
             color="emerald"
             badge="Verified"
@@ -277,7 +272,6 @@ export const AdminDashboard = () => {
           <StatCard
             title="Pending Approvals"
             value={kpis.pending_member_approvals || 0}
-            subtitle="Awaiting admin review"
             icon={AlertCircle}
             color="amber"
             badge={kpis.pending_member_approvals > 0 ? `${kpis.pending_member_approvals} Pending` : 'All Clear'}
@@ -296,14 +290,12 @@ export const AdminDashboard = () => {
               Event Activities & Completion Breakdown
             </h2>
           </div>
-          <span className="text-[11px] text-slate-400 font-medium">Click any count button to filter activities</span>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             title="Actual Completed"
             value={kpis.actual_completed_events || 0}
-            subtitle="Total verified events"
             icon={Award}
             color="emerald"
             badge="Conducted"
@@ -313,7 +305,6 @@ export const AdminDashboard = () => {
           <StatCard
             title="Target Events"
             value={kpis.target_events || 0}
-            subtitle="Goal for period"
             icon={Target}
             color="indigo"
             clickable={true}
@@ -322,7 +313,6 @@ export const AdminDashboard = () => {
           <StatCard
             title="New Completed"
             value={kpis.portal_completed_events || 0}
-            subtitle="Conducted this month"
             icon={Calendar}
             color="purple"
             clickable={true}
@@ -331,7 +321,6 @@ export const AdminDashboard = () => {
           <StatCard
             title="Planned Events"
             value={kpis.planned_events || 0}
-            subtitle="Scheduled upcoming"
             icon={Clock}
             color="amber"
             clickable={true}

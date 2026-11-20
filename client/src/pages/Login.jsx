@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Layers, Lock, Mail, Shield, User, ArrowRight, AlertCircle, Code, Cpu, Eye, EyeOff, Briefcase } from 'lucide-react';
+import { Layers, Lock, Mail, ArrowRight, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
@@ -10,8 +10,66 @@ export const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const { login } = useAuth();
+  // Single Sign-On (SSO) States
+  const [ssoLogin, setSsoLogin] = useState(false);
+  const [ssoToken, setSsoToken] = useState('');
+  const [ssoLoading, setSsoLoading] = useState(false);
+
+  const { login, ssoLogin: ssoLoginUser } = useAuth();
   const navigate = useNavigate();
+
+  // 1. Read Base64-encoded email / SSO token from URL parameters
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const emailFromUrl = params.get("email");
+    const tokenFromUrl = params.get("sso_token") || params.get("token");
+
+    if (tokenFromUrl) {
+      setSsoToken(tokenFromUrl);
+    }
+
+    if (emailFromUrl) {
+      try {
+        const decodedEmail = atob(emailFromUrl);
+        setEmail(decodedEmail);
+        setSsoLogin(true);
+      } catch (e) {
+        setEmail(emailFromUrl);
+        setSsoLogin(true);
+      }
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  // 2. Trigger automated SSO login when email and ssoLogin flag are ready
+  useEffect(() => {
+    if (ssoLogin && email) {
+      handleSSOLogin(email, ssoToken);
+      setSsoLogin(false);
+    }
+  }, [email, ssoLogin]);
+
+  const handleSSOLogin = async (targetEmail, targetToken) => {
+    setError('');
+    setSsoLoading(true);
+
+    try {
+      const user = await ssoLoginUser(targetEmail, targetToken);
+
+      if (user.role === 'ADMIN') {
+        navigate('/admin/dashboard');
+      } else if (user.role === 'MEMBER') {
+        navigate('/member/dashboard');
+      } else {
+        navigate('/coordinator/dashboard');
+      }
+    } catch (err) {
+      console.error('SSO Login Failed:', err);
+      setError(err.response?.data?.message || err.message || 'Alumni SSO Login failed. Please sign in manually.');
+    } finally {
+      setSsoLoading(false);
+    }
+  };
 
   const handleLogin = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -33,12 +91,6 @@ export const Login = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleQuickFill = (demoEmail, demoPassword) => {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-    setError('');
   };
 
   return (
@@ -63,6 +115,16 @@ export const Login = () => {
           </p>
         </div>
 
+        {ssoLoading && (
+          <div className="mb-6 p-4 rounded-xl bg-purple-50 border border-purple-200 text-purple-800 text-sm flex items-center gap-3">
+            <div className="w-5 h-5 border-2 border-[#7C3AED] border-t-transparent rounded-full animate-spin shrink-0"></div>
+            <div>
+              <p className="font-bold text-xs">Authenticating Single Sign-On...</p>
+              <p className="text-[11px] text-purple-600">Connecting your session for {email || 'account'}</p>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm flex items-start gap-2.5">
             <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
@@ -70,11 +132,11 @@ export const Login = () => {
           </div>
         )}
 
-        {/* Form */}
+        {/* Clean Form */}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-              Email Address
+              EMAIL ADDRESS
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -93,7 +155,7 @@ export const Login = () => {
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-              Password
+              PASSWORD
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -120,7 +182,7 @@ export const Login = () => {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || ssoLoading}
             className="w-full mt-2 py-3 px-4 bg-[#7C3AED] hover:bg-[#6D28D9] active:bg-[#5B21B6] text-white font-bold text-sm rounded-xl shadow-md shadow-[#7C3AED]/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
           >
             {loading ? (
@@ -133,98 +195,6 @@ export const Login = () => {
             )}
           </button>
         </form>
-
-        {/* Quick Demo Logins */}
-        <div className="mt-8 pt-6 border-t border-slate-100">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 text-center">
-            Quick Demo Accounts
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickFill('admin@club.edu', 'Admin@123')}
-              className="p-2.5 bg-[#EDE9FE]/70 hover:bg-[#EDE9FE] border border-[#DDD6FE] rounded-xl text-left transition-colors col-span-2 sm:col-span-1"
-            >
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#7C3AED]">
-                <Shield className="w-3.5 h-3.5 text-[#7C3AED]" />
-                <span>Admin</span>
-              </div>
-              <p className="text-[11px] text-slate-500 truncate mt-0.5">admin@club.edu</p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickFill('ai.coord@club.edu', 'Coord@123')}
-              className="p-2.5 bg-slate-50 hover:bg-slate-100 border border-[#CBD5E1] rounded-xl text-left transition-colors"
-            >
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#7C3AED]">
-                <Cpu className="w-3.5 h-3.5 text-[#7C3AED]" />
-                <span>AI Club</span>
-              </div>
-              <p className="text-[11px] text-slate-500 truncate mt-0.5">ai.coord@club.edu</p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickFill('it.coord@club.edu', 'Coord@123')}
-              className="p-2.5 bg-slate-50 hover:bg-slate-100 border border-[#CBD5E1] rounded-xl text-left transition-colors"
-            >
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#7C3AED]">
-                <Code className="w-3.5 h-3.5 text-[#7C3AED]" />
-                <span>IT Club</span>
-              </div>
-              <p className="text-[11px] text-slate-500 truncate mt-0.5">it.coord@club.edu</p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickFill('electronics.coord@club.edu', 'Coord@123')}
-              className="p-2.5 bg-slate-50 hover:bg-slate-100 border border-[#CBD5E1] rounded-xl text-left transition-colors"
-            >
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#7C3AED]">
-                <Layers className="w-3.5 h-3.5 text-[#7C3AED]" />
-                <span>Electronics</span>
-              </div>
-              <p className="text-[11px] text-slate-500 truncate mt-0.5">electronics.coord@club.edu</p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickFill('auto.coord@club.edu', 'Coord@123')}
-              className="p-2.5 bg-slate-50 hover:bg-slate-100 border border-[#CBD5E1] rounded-xl text-left transition-colors"
-            >
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#7C3AED]">
-                <User className="w-3.5 h-3.5 text-[#7C3AED]" />
-                <span>Auto Club</span>
-              </div>
-              <p className="text-[11px] text-slate-500 truncate mt-0.5">auto.coord@club.edu</p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickFill('entrepreneur.coord@club.edu', 'Coord@123')}
-              className="p-2.5 bg-slate-50 hover:bg-slate-100 border border-[#CBD5E1] rounded-xl text-left transition-colors"
-            >
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#7C3AED]">
-                <Briefcase className="w-3.5 h-3.5 text-[#7C3AED]" />
-                <span>Entrepreneur</span>
-              </div>
-              <p className="text-[11px] text-slate-500 truncate mt-0.5">entrepreneur.coord@club.edu</p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickFill('rahul.s@student.edu', 'Member@123')}
-              className="p-2.5 bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200/60 rounded-xl text-left transition-colors"
-            >
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#16A34A]">
-                <User className="w-3.5 h-3.5 text-[#16A34A]" />
-                <span>Student Member</span>
-              </div>
-              <p className="text-[11px] text-slate-500 truncate mt-0.5">rahul.s@student.edu</p>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

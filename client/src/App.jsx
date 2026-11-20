@@ -39,11 +39,11 @@ export default function App() {
 
   return (
     <Routes>
-      {/* Public Route */}
+      {/* Public & SSO Routes */}
       <Route
         path="/login"
         element={
-          isAuthenticated ? (
+          isAuthenticated && !window.location.search.includes('email=') ? (
             user?.role === 'ADMIN' ? (
               <Navigate to="/admin/dashboard" replace />
             ) : user?.role === 'MEMBER' ? (
@@ -56,6 +56,8 @@ export default function App() {
           )
         }
       />
+      <Route path="/sso" element={<Login />} />
+      <Route path="/club/sso" element={<Login />} />
 
       {/* Admin Protected Routes */}
       <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
@@ -193,7 +195,7 @@ export default function App() {
       <Route
         path="*"
         element={
-          isAuthenticated ? (
+          isAuthenticated && !window.location.search.includes('email=') ? (
             user?.role === 'ADMIN' ? (
               <Navigate to="/admin/dashboard" replace />
             ) : user?.role === 'MEMBER' ? (
@@ -202,7 +204,7 @@ export default function App() {
               <Navigate to="/coordinator/dashboard" replace />
             )
           ) : (
-            <Navigate to="/login" replace />
+            <Navigate to={`/login${window.location.search}`} replace />
           )
         }
       />

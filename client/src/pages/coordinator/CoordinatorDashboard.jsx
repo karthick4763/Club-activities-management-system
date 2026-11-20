@@ -223,7 +223,6 @@ export const CoordinatorDashboard = () => {
         <StatCard
           title="Student Members"
           value={kpis.student_members || 0}
-          subtitle="Auto-approved regular student members"
           icon={CheckCircle2}
           color="emerald"
           clickable={true}
@@ -240,16 +239,12 @@ export const CoordinatorDashboard = () => {
               Alumni Outreach & Recruitment Breakdown
             </h2>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-slate-400 font-medium">Click any count button to view list</span>
-          </div>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             title="Actual Alumni"
             value={kpis.actual_alumni || 0}
-            subtitle="Verified alumni network"
             icon={Users}
             color="purple"
             badge={`${kpis.progress_percent || 0}% Goal`}
@@ -259,7 +254,6 @@ export const CoordinatorDashboard = () => {
           <StatCard
             title="Target Goal"
             value={kpis.target_members || 0}
-            subtitle="Recruitment target"
             icon={Target}
             color="indigo"
             clickable={true}
@@ -268,7 +262,6 @@ export const CoordinatorDashboard = () => {
           <StatCard
             title="New Members"
             value={kpis.monthly_approved || kpis.portal_approved_alumni || 0}
-            subtitle="Portal verified additions"
             icon={CheckCircle2}
             color="emerald"
             badge="Verified"
@@ -278,7 +271,6 @@ export const CoordinatorDashboard = () => {
           <StatCard
             title="Pending Approvals"
             value={kpis.monthly_pending || 0}
-            subtitle="Awaiting admin review"
             icon={AlertCircle}
             color="amber"
             badge={kpis.monthly_pending > 0 ? `${kpis.monthly_pending} Pending` : 'Zero Pending'}
@@ -297,14 +289,12 @@ export const CoordinatorDashboard = () => {
               Event Activities & Completion Breakdown
             </h2>
           </div>
-          <span className="text-[11px] text-slate-400 font-medium">Click any count button to filter events</span>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             title="Events Completed"
             value={kpis.actual_completed_events || 0}
-            subtitle="Conducted activities"
             icon={Award}
             color="emerald"
             badge="Conducted"
@@ -314,16 +304,14 @@ export const CoordinatorDashboard = () => {
           <StatCard
             title="Target Events"
             value={kpis.target_events || 0}
-            subtitle="Goal for period"
             icon={Target}
             color="indigo"
             clickable={true}
             onClick={() => navigate('/coordinator/events')}
           />
           <StatCard
-            title="New Portal Events"
+            title="New Events"
             value={kpis.portal_completed_events || 0}
-            subtitle="Completed this period"
             icon={Calendar}
             color="purple"
             clickable={true}
@@ -332,7 +320,6 @@ export const CoordinatorDashboard = () => {
           <StatCard
             title="Planned Events"
             value={kpis.planned_events || 0}
-            subtitle="Scheduled upcoming"
             icon={Clock}
             color="amber"
             clickable={true}
@@ -442,7 +429,7 @@ export const CoordinatorDashboard = () => {
                   <p className="text-[9px] text-slate-400 font-medium">target</p>
                 </div>
                 <div className="p-3 bg-purple-50/70 rounded-2xl border border-purple-100">
-                  <p className="text-[10px] font-bold uppercase text-[#7C3AED]">New Portal</p>
+                  <p className="text-[10px] font-bold uppercase text-[#7C3AED]">Completed</p>
                   <p className="text-xl font-extrabold text-[#7C3AED] mt-0.5">{kpis.portal_completed_events || 0}</p>
                   <p className="text-[9px] text-purple-600 font-medium">this month</p>
                 </div>

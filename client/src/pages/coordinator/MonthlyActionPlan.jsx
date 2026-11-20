@@ -384,7 +384,7 @@ export const MonthlyActionPlan = () => {
                 <p className="text-[9px] text-slate-400">target</p>
               </div>
               <div className="bg-purple-50/70 p-2 rounded-xl border border-purple-100">
-                <p className="text-[10px] font-bold uppercase text-[#7C3AED]">New Portal</p>
+                <p className="text-[10px] font-bold uppercase text-[#7C3AED]">Completed</p>
                 <p className="text-base font-extrabold text-[#7C3AED]">{plan?.events?.filter(e => e.status === 'COMPLETED').length || 0}</p>
                 <p className="text-[9px] text-purple-600">this month</p>
               </div>
