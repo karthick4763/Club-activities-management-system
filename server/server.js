@@ -51,7 +51,25 @@ if (!fs.existsSync(uploadsDir)) {
 // Master Router
 const appRouter = createRouter();
 
-// Health Check
+// Root & Health Checks for Cloud Hosting (Render, AWS, GCP)
+appRouter.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    service: 'Club Activities Management System API',
+    timestamp: new Date(),
+    engine: 'Native Node.js HTTP Engine'
+  });
+});
+appRouter.add('HEAD', '/', (req, res) => {
+  res.statusCode = 200;
+  res.end();
+});
+appRouter.get('/health', (req, res) => {
+  res.status(200).json({ status: 'healthy', timestamp: new Date() });
+});
+appRouter.get('/healthz', (req, res) => {
+  res.status(200).json({ status: 'healthy', timestamp: new Date() });
+});
 appRouter.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'healthy', timestamp: new Date(), engine: 'Native Node.js HTTP Engine' });
 });
